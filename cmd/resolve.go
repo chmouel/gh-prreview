@@ -19,11 +19,13 @@ var (
 )
 
 var resolveCmd = &cobra.Command{
-	Use:   "resolve [PR_NUMBER] [COMMENT_ID]",
+	Use:   "resolve [COMMENT_ID] or [PR_NUMBER] [COMMENT_ID]",
 	Short: "Resolve or unresolve review comment threads",
-	Long:  `Mark review comment threads as resolved or unresolved. Use --all to apply the action to all unresolved comments on a PR.`,
-	Args:  cobra.MinimumNArgs(0),
-	RunE:  runResolve,
+	Long:  `Mark review comment threads as resolved or unresolved. Use --all to apply the action to all unresolved comments on a PR.
+When one argument is provided, it's treated as COMMENT_ID and PR is inferred from the current branch.
+When two arguments are provided, the first is PR_NUMBER and the second is COMMENT_ID.`,
+	Args: cobra.MinimumNArgs(0),
+	RunE: runResolve,
 }
 
 func init() {
@@ -40,21 +42,41 @@ func runResolve(cmd *cobra.Command, args []string) error {
 	}
 
 	var prNumber int
+	var commentID int64
 	var err error
 
-	// Determine PR number
+	// Parse arguments based on count
 	if len(args) == 0 {
-		// No arguments provided, get PR from current branch
+		// No arguments provided, get PR from current branch and require --all
+		if !resolveAll {
+			return fmt.Errorf("either provide COMMENT_ID, or use --all flag with inferred PR")
+		}
 		prNumber, err = client.GetCurrentBranchPR()
 		if err != nil {
 			return err
 		}
-	} else {
-		// First argument is PR number
+	} else if len(args) == 1 {
+		// One argument: treat as COMMENT_ID, infer PR from current branch
+		commentID, err = strconv.ParseInt(args[0], 10, 64)
+		if err != nil {
+			return fmt.Errorf("invalid comment ID: %s", args[0])
+		}
+		prNumber, err = client.GetCurrentBranchPR()
+		if err != nil {
+			return err
+		}
+	} else if len(args) == 2 {
+		// Two arguments: first is PR, second is COMMENT_ID
 		prNumber, err = strconv.Atoi(args[0])
 		if err != nil {
 			return fmt.Errorf("invalid PR number: %s", args[0])
 		}
+		commentID, err = strconv.ParseInt(args[1], 10, 64)
+		if err != nil {
+			return fmt.Errorf("invalid comment ID: %s", args[1])
+		}
+	} else {
+		return fmt.Errorf("too many arguments provided")
 	}
 
 	// Handle --all flag
@@ -63,13 +85,8 @@ func runResolve(cmd *cobra.Command, args []string) error {
 	}
 
 	// Handle individual comment resolution
-	if len(args) < 2 {
+	if commentID == 0 {
 		return fmt.Errorf("comment ID is required when not using --all flag")
-	}
-
-	commentID, err := strconv.ParseInt(args[1], 10, 64)
-	if err != nil {
-		return fmt.Errorf("invalid comment ID: %s", args[1])
 	}
 
 	return resolveIndividualComment(client, prNumber, commentID)
