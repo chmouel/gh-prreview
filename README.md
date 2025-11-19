@@ -1,5 +1,7 @@
 # gh-prreview
 
+<img width="1752" height="1073" alt="image" src="https://github.com/user-attachments/assets/544dfab5-1519-415a-866d-8e85b796ae76" />
+
 A GitHub CLI extension to apply review comments and suggestions directly to
 your local code.
 
