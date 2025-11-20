@@ -964,7 +964,31 @@ func (r *suggestionRenderer) EditLine(comment *github.ReviewComment) int {
 }
 
 func (r *suggestionRenderer) FilterValue(comment *github.ReviewComment) string {
-	return r.Title(comment) + " " + r.Description(comment)
+	parts := []string{
+		r.Title(comment),
+		r.Description(comment),
+		comment.Path,
+	}
+
+	if body := ui.StripSuggestionBlock(comment.Body); body != "" {
+		parts = append(parts, body)
+	}
+
+	if comment.SuggestedCode != "" {
+		parts = append(parts, comment.SuggestedCode)
+	}
+
+	if comment.DiffHunk != "" {
+		parts = append(parts, comment.DiffHunk)
+	}
+
+	for _, reply := range comment.ThreadComments {
+		if reply.Body != "" {
+			parts = append(parts, reply.Body)
+		}
+	}
+
+	return strings.Join(parts, " ")
 }
 
 func (r *suggestionRenderer) IsSkippable(comment *github.ReviewComment) bool {

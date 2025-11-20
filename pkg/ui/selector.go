@@ -90,6 +90,30 @@ func SelectFromListWithAction[T any](items []T, renderer ItemRenderer[T], custom
 	}
 
 	l := list.New(listItems, itemDelegate[T]{renderer}, 100, 20)
+
+	// Brighten the status bar when filtering so the "N filtered" text remains readable.
+	styles := list.DefaultStyles()
+	styles.StatusBarFilterCount = lipgloss.NewStyle().
+		Foreground(lipgloss.Color("252")). // Light gray for dark backgrounds
+		Bold(true)
+	styles.StatusBarActiveFilter = lipgloss.NewStyle().
+		Foreground(lipgloss.Color("229")). // Brighter for the active filter value
+		Bold(true)
+	styles.StatusBar = styles.StatusBar.Foreground(lipgloss.Color("247"))
+	l.Styles = styles
+
+	// Make the filter bar high-contrast so typed text is visible.
+	l.FilterInput.Prompt = "Filter: "
+	l.FilterInput.PromptStyle = lipgloss.NewStyle().
+		Foreground(lipgloss.Color("229")). // yellow-leaning white
+		Bold(true)
+	l.FilterInput.TextStyle = lipgloss.NewStyle().
+		Foreground(lipgloss.Color("231")) // white text while typing
+	l.FilterInput.Cursor.Style = lipgloss.NewStyle().
+		Foreground(lipgloss.Color("213")). // bright magenta cursor
+		Bold(true)
+	l.SetShowFilter(true)
+
 	l.Title = "Select an item"
 	l.SetShowStatusBar(true)
 	l.SetShowPagination(true)
@@ -152,6 +176,23 @@ func (m *SelectionModel[T]) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		var cmd tea.Cmd
 		m.viewport, cmd = m.viewport.Update(msg)
 		return m, cmd
+	}
+
+	// When the help overlay is open, keep interaction scoped to the help view.
+	if m.showHelp {
+		switch msg := msg.(type) {
+		case tea.KeyMsg:
+			switch msg.String() {
+			case "?", "esc":
+				m.showHelp = false
+				return m, nil
+			case "ctrl+c", "q":
+				return m, tea.Quit
+			}
+		case tea.WindowSizeMsg:
+			m.windowSize = msg
+		}
+		return m, nil
 	}
 
 	switch msg := msg.(type) {
@@ -391,8 +432,8 @@ func (m *SelectionModel[T]) View() string {
 		return m.viewport.View()
 	}
 
-	if m.list.SelectedItem() == nil {
-		return ""
+	if m.showHelp {
+		return m.renderHelpOverlay()
 	}
 
 	// Help text
@@ -403,25 +444,9 @@ func (m *SelectionModel[T]) View() string {
 	var helpText string
 	if !m.showHelp {
 		// Compact view
-		helpText = "↑/↓ navigate • enter details • o open • r resolve • h show/hide resolved • q quit • ? more"
+		helpText = "↑/↓ navigate • enter details • o open • r resolve • h show/hide resolved • / search • q quit • ? help"
 	} else {
-		// Expanded view
-		helpText = "↑/↓ navigate • enter details • q quit • ? less\n"
-
-		var extraCommands []string
-		if m.onOpen != nil {
-			extraCommands = append(extraCommands, "o open browser")
-		}
-		extraCommands = append(extraCommands, "ctrl+e edit")
-		if m.filterFunc != nil {
-			extraCommands = append(extraCommands, "h toggle show resolved")
-		}
-		if m.customAction != nil && m.actionKey != "" {
-			extraCommands = append(extraCommands, m.actionKey)
-		}
-		extraCommands = append(extraCommands, "/ search")
-
-		helpText += strings.Join(extraCommands, "  •  ")
+		helpText = ""
 	}
 
 	help := helpStyle.Render(helpText)
@@ -447,6 +472,107 @@ func (m *SelectionModel[T]) View() string {
 	)
 
 	return content
+}
+
+// renderHelpOverlay draws a centered help modal similar to the default Bubble Tea help panel.
+func (m *SelectionModel[T]) renderHelpOverlay() string {
+	width := m.windowSize.Width
+	height := m.windowSize.Height
+
+	if width == 0 {
+		width = 80
+	}
+	if height == 0 {
+		height = 24
+	}
+
+	type entry struct {
+		key  string
+		desc string
+	}
+
+	entries := []entry{
+		{"↑/↓", "Navigate"},
+		{"enter", "Select or open details"},
+		{"q", "Quit"},
+		{"?", "Close help"},
+	}
+
+	if m.onOpen != nil {
+		entries = append(entries, entry{"o", "Open in browser"})
+	}
+
+	entries = append(entries, entry{"ctrl+e", "Edit in $EDITOR"})
+
+	if m.filterFunc != nil {
+		entries = append(entries, entry{"h", "Toggle show resolved"})
+	}
+
+	if m.customAction != nil && m.actionKey != "" {
+		key, desc := splitActionKey(m.actionKey)
+		entries = append(entries, entry{key, desc})
+	}
+
+	entries = append(entries, entry{"/", "Search"})
+
+	keyStyle := lipgloss.NewStyle().Foreground(lipgloss.Color("207")).Bold(true)
+	descStyle := lipgloss.NewStyle().Foreground(lipgloss.Color("252"))
+	keyCell := lipgloss.NewStyle().Width(12).Align(lipgloss.Right)
+
+	var rows []string
+	for _, e := range entries {
+		rows = append(rows, lipgloss.JoinHorizontal(
+			lipgloss.Left,
+			keyCell.Render(keyStyle.Render(e.key)),
+			"  ",
+			descStyle.Render(e.desc),
+		))
+	}
+
+	title := lipgloss.NewStyle().Foreground(lipgloss.Color("36")).Bold(true).Render("Help")
+	subtitle := lipgloss.NewStyle().Foreground(lipgloss.Color("245")).Render("Press ? to return")
+
+	body := lipgloss.JoinVertical(
+		lipgloss.Left,
+		title,
+		subtitle,
+		"",
+		strings.Join(rows, "\n"),
+	)
+
+	boxWidth := width - 8
+	if boxWidth > 72 {
+		boxWidth = 72
+	}
+	if boxWidth < 32 {
+		boxWidth = width - 2
+	}
+
+	box := lipgloss.NewStyle().
+		Border(lipgloss.RoundedBorder()).
+		BorderForeground(lipgloss.Color("240")).
+		Padding(1, 2).
+		Width(boxWidth).
+		Render(body)
+
+	return lipgloss.Place(
+		width,
+		height,
+		lipgloss.Center,
+		lipgloss.Center,
+		box,
+	)
+}
+
+func splitActionKey(actionKey string) (string, string) {
+	parts := strings.Fields(actionKey)
+	if len(parts) == 0 {
+		return actionKey, ""
+	}
+	if len(parts) == 1 {
+		return parts[0], ""
+	}
+	return parts[0], strings.Join(parts[1:], " ")
 }
 
 // itemDelegate renders individual list items
