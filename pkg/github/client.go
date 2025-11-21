@@ -773,3 +773,48 @@ func (c *Client) ReplyToReviewComment(prNumber int, commentID int64, body string
 		HTMLURL: response.HTMLURL,
 	}, nil
 }
+
+// SubmitPullRequestReview submits a review for a pull request.
+// event can be "APPROVE", "REQUEST_CHANGES", or "COMMENT".
+func (c *Client) SubmitPullRequestReview(prNumber int, event string, body string) error {
+	repo, err := c.getRepo()
+	if err != nil {
+		return err
+	}
+
+	endpoint := fmt.Sprintf("repos/%s/pulls/%d/reviews", repo, prNumber)
+	c.debugLog("Submitting review for %s PR #%d: %s", repo, prNumber, event)
+
+	tmpFile, err := os.CreateTemp("", "gh-prreview-review-*.txt")
+	if err != nil {
+		return fmt.Errorf("failed to create temporary file: %w", err)
+	}
+	defer func() {
+		_ = os.Remove(tmpFile.Name())
+	}()
+
+	if _, err := tmpFile.WriteString(body); err != nil {
+		_ = tmpFile.Close()
+		return fmt.Errorf("failed to write review body: %w", err)
+	}
+	if err := tmpFile.Close(); err != nil {
+		return fmt.Errorf("failed to close temporary file: %w", err)
+	}
+
+	args := []string{"api", endpoint, "-X", "POST", "-f", fmt.Sprintf("event=%s", event)}
+	if body != "" {
+		args = append(args, "-f", fmt.Sprintf("body=@%s", tmpFile.Name()))
+	}
+
+	stdOut, stdErr, err := gh.Exec(args...)
+	if err != nil {
+		c.debugLog("Failed to submit review: %v", err)
+		if stdErr.Len() > 0 {
+			c.debugLog("Stderr: %s", stdErr.String())
+		}
+		return fmt.Errorf("failed to submit review: %w", err)
+	}
+
+	c.debugLog("Review submitted successfully. Response length: %d", len(stdOut.Bytes()))
+	return nil
+}

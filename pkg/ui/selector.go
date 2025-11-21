@@ -48,6 +48,8 @@ type SelectionModel[T any] struct {
 	actionKey          string // Key binding description for custom action (e.g., "r resolve")
 	customActionSecond CustomAction[T]
 	actionKeySecond    string // Key binding description for second custom action (e.g., "R resolve+comment")
+	customActionThird  CustomAction[T]
+	actionKeyThird     string // Key binding description for third custom action
 	onOpen             CustomAction[T]
 	viewport           viewport.Model
 	showDetail         bool
@@ -56,6 +58,11 @@ type SelectionModel[T any] struct {
 	renderer           ItemRenderer[T]
 	showHelp           bool
 	onSelect           CustomAction[T]
+
+	// Parsed keys for actions
+	key1 string
+	key2 string
+	key3 string
 }
 
 // Item wraps a generic item for the list model
@@ -82,9 +89,35 @@ func SelectFromList[T any](items []T, renderer ItemRenderer[T]) (T, error) {
 	return SelectFromListWithAction(items, renderer, nil, "", nil, nil, nil, nil, "")
 }
 
+// SelectionOptions configures the selector
+type SelectionOptions[T any] struct {
+	CustomAction       CustomAction[T]
+	ActionKey          string
+	CustomActionSecond CustomAction[T]
+	ActionKeySecond    string
+	CustomActionThird  CustomAction[T]
+	ActionKeyThird     string
+	OnOpen             CustomAction[T]
+	FilterFunc         func(T, bool) bool
+	OnSelect           CustomAction[T]
+}
+
 // SelectFromListWithAction creates an interactive selector with a custom action
 // The customAction is triggered by r, and actionKey describes the action in the help text
 func SelectFromListWithAction[T any](items []T, renderer ItemRenderer[T], customAction CustomAction[T], actionKey string, onOpen CustomAction[T], filterFunc func(T, bool) bool, onSelect CustomAction[T], customActionSecond CustomAction[T], actionKeySecond string) (T, error) {
+	return SelectFromListAdvanced(items, renderer, SelectionOptions[T]{
+		CustomAction:       customAction,
+		ActionKey:          actionKey,
+		CustomActionSecond: customActionSecond,
+		ActionKeySecond:    actionKeySecond,
+		OnOpen:             onOpen,
+		FilterFunc:         filterFunc,
+		OnSelect:           onSelect,
+	})
+}
+
+// SelectFromListAdvanced creates an interactive selector with advanced options
+func SelectFromListAdvanced[T any](items []T, renderer ItemRenderer[T], opts SelectionOptions[T]) (T, error) {
 	// Convert items to list items
 	listItems := make([]list.Item, len(items))
 	for i, item := range items {
@@ -131,22 +164,40 @@ func SelectFromListWithAction[T any](items []T, renderer ItemRenderer[T], custom
 	l.SetFilteringEnabled(true)
 	l.SetShowHelp(false)
 
+	// Parse keys
+	key1, _ := splitActionKey(opts.ActionKey)
+	key2, _ := splitActionKey(opts.ActionKeySecond)
+	key3, _ := splitActionKey(opts.ActionKeyThird)
+
+	// Default fallback if empty but action exists (backwards compatibility)
+	if opts.CustomAction != nil && key1 == "" {
+		key1 = "r"
+	}
+	if opts.CustomActionSecond != nil && key2 == "" {
+		key2 = "R"
+	}
+
 	m := &SelectionModel[T]{
 		list:               l,
 		items:              items,
 		result:             make([]T, 0),
-		customAction:       customAction,
-		actionKey:          actionKey,
-		customActionSecond: customActionSecond,
-		actionKeySecond:    actionKeySecond,
-		onOpen:             onOpen,
+		customAction:       opts.CustomAction,
+		actionKey:          opts.ActionKey,
+		customActionSecond: opts.CustomActionSecond,
+		actionKeySecond:    opts.ActionKeySecond,
+		customActionThird:  opts.CustomActionThird,
+		actionKeyThird:     opts.ActionKeyThird,
+		onOpen:             opts.OnOpen,
 		viewport:           viewport.New(0, 0),
-		filterFunc:         filterFunc,
+		filterFunc:         opts.FilterFunc,
 		renderer:           renderer,
-		onSelect:           onSelect,
+		onSelect:           opts.OnSelect,
+		key1:               key1,
+		key2:               key2,
+		key3:               key3,
 	}
 
-	if filterFunc != nil {
+	if opts.FilterFunc != nil {
 		m.filterActive = true
 		m.updateVisibleItems()
 	}
@@ -359,44 +410,6 @@ func (m *SelectionModel[T]) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 				}
 			}
 			return m, nil
-		case "r":
-			// Custom action (e.g., resolve)
-			if m.customAction != nil {
-				selected := m.list.SelectedItem()
-				if selected != nil {
-					item := selected.(listItem[T])
-					msg, err := m.customAction(item.value)
-					if err != nil {
-						return m, m.list.NewStatusMessage(Colorize(ColorRed, err.Error()))
-					}
-					// Force update of the item in the list to reflect changes
-					m.list.SetItem(m.list.Index(), item)
-
-					if msg != "" {
-						return m, m.list.NewStatusMessage(msg)
-					}
-				}
-			}
-			return m, nil
-		case "R":
-			// Secondary custom action (e.g., resolve with comment)
-			if m.customActionSecond != nil {
-				selected := m.list.SelectedItem()
-				if selected != nil {
-					item := selected.(listItem[T])
-					msg, err := m.customActionSecond(item.value)
-					if err != nil {
-						return m, m.list.NewStatusMessage(Colorize(ColorRed, err.Error()))
-					}
-					// Force update of the item in the list to reflect changes
-					m.list.SetItem(m.list.Index(), item)
-
-					if msg != "" {
-						return m, m.list.NewStatusMessage(msg)
-					}
-				}
-			}
-			return m, nil
 		case "right", "l":
 			// Also allow right arrow or 'l' to enter detail view if in browse mode
 			if m.onOpen != nil {
@@ -410,6 +423,71 @@ func (m *SelectionModel[T]) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 					m.viewport.GotoTop()
 					return m, nil
 				}
+			}
+		default:
+			// Handle dynamic custom keys
+			if m.key1 != "" && msg.String() == m.key1 {
+				if m.customAction != nil {
+					selected := m.list.SelectedItem()
+					if selected != nil {
+						item := selected.(listItem[T])
+						msg, err := m.customAction(item.value)
+						if err != nil {
+							return m, tea.Batch(tea.EnterAltScreen, m.list.NewStatusMessage(Colorize(ColorRed, err.Error())))
+						}
+						// Force update of the item in the list to reflect changes
+						m.list.SetItem(m.list.Index(), item)
+
+						cmd := tea.EnterAltScreen
+						if msg != "" {
+							cmd = tea.Batch(cmd, m.list.NewStatusMessage(msg))
+						}
+						return m, cmd
+					}
+				}
+				return m, nil
+			}
+			if m.key2 != "" && msg.String() == m.key2 {
+				if m.customActionSecond != nil {
+					selected := m.list.SelectedItem()
+					if selected != nil {
+						item := selected.(listItem[T])
+						msg, err := m.customActionSecond(item.value)
+						if err != nil {
+							return m, tea.Batch(tea.EnterAltScreen, m.list.NewStatusMessage(Colorize(ColorRed, err.Error())))
+						}
+						// Force update of the item in the list to reflect changes
+						m.list.SetItem(m.list.Index(), item)
+
+						cmd := tea.EnterAltScreen
+						if msg != "" {
+							cmd = tea.Batch(cmd, m.list.NewStatusMessage(msg))
+						}
+						return m, cmd
+					}
+				}
+				return m, nil
+			}
+			if m.key3 != "" && msg.String() == m.key3 {
+				if m.customActionThird != nil {
+					selected := m.list.SelectedItem()
+					if selected != nil {
+						item := selected.(listItem[T])
+						msg, err := m.customActionThird(item.value)
+						if err != nil {
+							return m, tea.Batch(tea.EnterAltScreen, m.list.NewStatusMessage(Colorize(ColorRed, err.Error())))
+						}
+						// Force update of the item in the list to reflect changes
+						m.list.SetItem(m.list.Index(), item)
+
+						cmd := tea.EnterAltScreen
+						if msg != "" {
+							cmd = tea.Batch(cmd, m.list.NewStatusMessage(msg))
+						}
+						return m, cmd
+					}
+				}
+				return m, nil
 			}
 		}
 	case tea.WindowSizeMsg:
@@ -479,7 +557,26 @@ func (m *SelectionModel[T]) View() string {
 	var helpText string
 	if !m.showHelp {
 		// Compact view
-		helpText = "↑/↓ navigate • enter details • o open • r resolve • R resolve+comment • h show/hide resolved • / search • q quit • ? help"
+		var parts []string
+		parts = append(parts, "↑/↓ navigate", "enter details")
+		if m.onOpen != nil {
+			parts = append(parts, "o open")
+		}
+		if m.actionKey != "" {
+			parts = append(parts, m.actionKey)
+		}
+		if m.actionKeySecond != "" {
+			parts = append(parts, m.actionKeySecond)
+		}
+		if m.actionKeyThird != "" {
+			parts = append(parts, m.actionKeyThird)
+		}
+		if m.filterFunc != nil {
+			parts = append(parts, "h show/hide resolved")
+		}
+		parts = append(parts, "/ search", "q quit", "? help")
+
+		helpText = strings.Join(parts, " • ")
 	} else {
 		helpText = ""
 	}
@@ -553,6 +650,11 @@ func (m *SelectionModel[T]) renderHelpOverlay() string {
 
 	if m.customActionSecond != nil && m.actionKeySecond != "" {
 		key, desc := splitActionKey(m.actionKeySecond)
+		entries = append(entries, entry{key, desc})
+	}
+
+	if m.customActionThird != nil && m.actionKeyThird != "" {
+		key, desc := splitActionKey(m.actionKeyThird)
 		entries = append(entries, entry{key, desc})
 	}
 

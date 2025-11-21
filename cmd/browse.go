@@ -100,6 +100,38 @@ func runBrowse(cmd *cobra.Command, args []string) error {
 			return fmt.Sprintf("Opened comment %d in browser", item.Comment.ID), nil
 		}
 
+		// Create review action (on 'r')
+		reviewAction := func(item BrowseItem) (string, error) {
+			result, err := ui.GetReviewInput()
+			if err != nil {
+				// User cancelled or error
+				return "", nil
+			}
+
+			if result == nil {
+				return "", nil
+			}
+
+			// Map action to GitHub API event
+			var event string
+			switch result.Action {
+			case ui.ReviewActionApprove:
+				event = "APPROVE"
+			case ui.ReviewActionRequestChanges:
+				event = "REQUEST_CHANGES"
+			case ui.ReviewActionComment:
+				event = "COMMENT"
+			default:
+				return "", nil
+			}
+
+			if err := client.SubmitPullRequestReview(prNumber, event, result.Body); err != nil {
+				return "", err
+			}
+
+			return fmt.Sprintf("Review submitted: %s", event), nil
+		}
+
 		// Filter function (hide resolved and collapsed)
 		filterFunc := func(item BrowseItem, hideResolved bool) bool {
 			// 1. Check collapse state (Always applies)
@@ -127,7 +159,17 @@ func runBrowse(cmd *cobra.Command, args []string) error {
 			return "SHOW_DETAIL", nil
 		}
 
-		selected, err := ui.SelectFromListWithAction(browseItems, renderer, resolveAction, "r resolve", openAction, filterFunc, onSelect, resolveWithCommentAction, "R resolve+comment")
+		selected, err := ui.SelectFromListAdvanced(browseItems, renderer, ui.SelectionOptions[BrowseItem]{
+			CustomAction:       reviewAction,
+			ActionKey:          "r review",
+			CustomActionSecond: resolveAction,
+			ActionKeySecond:    "x resolve",
+			CustomActionThird:  resolveWithCommentAction,
+			ActionKeyThird:     "X resolve+comment",
+			OnOpen:             openAction,
+			FilterFunc:         filterFunc,
+			OnSelect:           onSelect,
+		})
 		if err != nil {
 			if errors.Is(err, ui.ErrNoSelection) {
 				return nil

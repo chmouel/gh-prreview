@@ -127,7 +127,7 @@ func runApply(cmd *cobra.Command, args []string) error {
 		return app.ApplyAll(suggestions)
 	}
 
-	return app.ApplyInteractive(suggestions)
+	return app.ApplyInteractive(suggestions, prNumber)
 }
 
 // checkCleanWorkingDirectory checks if the git working directory is clean
