@@ -77,16 +77,54 @@ func (a *Applier) ApplyAll(suggestions []*github.ReviewComment) error {
 }
 
 // ApplyInteractive prompts the user for each suggestion using an interactive selector
-func (a *Applier) ApplyInteractive(suggestions []*github.ReviewComment) error {
+func (a *Applier) ApplyInteractive(suggestions []*github.ReviewComment, prNumber int) error {
 	applied := 0
 	skipped := 0
 	remaining := make([]*github.ReviewComment, len(suggestions))
 	copy(remaining, suggestions)
 
+	// Review handler closure
+	handleReview := func(comment *github.ReviewComment) (string, error) {
+		result, err := ui.GetReviewInput()
+		if err != nil {
+			// User cancelled or error
+			return "", nil
+		}
+
+		if result == nil {
+			return "", nil
+		}
+
+		// Map action to GitHub API event
+		var event string
+		switch result.Action {
+		case ui.ReviewActionApprove:
+			event = "APPROVE"
+		case ui.ReviewActionRequestChanges:
+			event = "REQUEST_CHANGES"
+		case ui.ReviewActionComment:
+			event = "COMMENT"
+		default:
+			return "", nil
+		}
+
+		if err := a.githubClient.SubmitPullRequestReview(prNumber, event, result.Body); err != nil {
+			return "", err
+		}
+
+		return fmt.Sprintf("Review submitted: %s", event), nil
+	}
+
 	for len(remaining) > 0 {
 		// Use interactive selector to choose next suggestion
 		renderer := &suggestionRenderer{aiAvailable: a.aiProvider != nil}
-		selected, err := ui.SelectFromList(remaining, renderer)
+		selected, err := ui.SelectFromListWithAction(
+			remaining,
+			renderer,
+			handleReview,
+			"r review",
+			nil, nil, nil, nil, "",
+		)
 		if err != nil {
 			fmt.Printf("\n%s\n", ui.Colorize(ui.ColorGray, "Selection cancelled"))
 			break
