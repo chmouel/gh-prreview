@@ -203,7 +203,7 @@ func (m *ReviewDialogModel) View() string {
 // GetReviewInput launches the review dialog and returns the result
 func GetReviewInput() (*ReviewResult, error) {
 	m := NewReviewDialog()
-	p := tea.NewProgram(m)
+	p := tea.NewProgram(m, tea.WithAltScreen())
 	finalModel, err := p.Run()
 	if err != nil {
 		return nil, err

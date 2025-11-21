@@ -433,14 +433,16 @@ func (m *SelectionModel[T]) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 						item := selected.(listItem[T])
 						msg, err := m.customAction(item.value)
 						if err != nil {
-							return m, m.list.NewStatusMessage(Colorize(ColorRed, err.Error()))
+							return m, tea.Batch(tea.EnterAltScreen, m.list.NewStatusMessage(Colorize(ColorRed, err.Error())))
 						}
 						// Force update of the item in the list to reflect changes
 						m.list.SetItem(m.list.Index(), item)
 
+						cmd := tea.EnterAltScreen
 						if msg != "" {
-							return m, m.list.NewStatusMessage(msg)
+							cmd = tea.Batch(cmd, m.list.NewStatusMessage(msg))
 						}
+						return m, cmd
 					}
 				}
 				return m, nil
@@ -452,14 +454,16 @@ func (m *SelectionModel[T]) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 						item := selected.(listItem[T])
 						msg, err := m.customActionSecond(item.value)
 						if err != nil {
-							return m, m.list.NewStatusMessage(Colorize(ColorRed, err.Error()))
+							return m, tea.Batch(tea.EnterAltScreen, m.list.NewStatusMessage(Colorize(ColorRed, err.Error())))
 						}
 						// Force update of the item in the list to reflect changes
 						m.list.SetItem(m.list.Index(), item)
 
+						cmd := tea.EnterAltScreen
 						if msg != "" {
-							return m, m.list.NewStatusMessage(msg)
+							cmd = tea.Batch(cmd, m.list.NewStatusMessage(msg))
 						}
+						return m, cmd
 					}
 				}
 				return m, nil
@@ -471,14 +475,16 @@ func (m *SelectionModel[T]) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 						item := selected.(listItem[T])
 						msg, err := m.customActionThird(item.value)
 						if err != nil {
-							return m, m.list.NewStatusMessage(Colorize(ColorRed, err.Error()))
+							return m, tea.Batch(tea.EnterAltScreen, m.list.NewStatusMessage(Colorize(ColorRed, err.Error())))
 						}
 						// Force update of the item in the list to reflect changes
 						m.list.SetItem(m.list.Index(), item)
 
+						cmd := tea.EnterAltScreen
 						if msg != "" {
-							return m, m.list.NewStatusMessage(msg)
+							cmd = tea.Batch(cmd, m.list.NewStatusMessage(msg))
 						}
+						return m, cmd
 					}
 				}
 				return m, nil
