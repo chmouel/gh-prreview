@@ -82,13 +82,6 @@ func runBrowse(cmd *cobra.Command, args []string) error {
 			return resolveCommentAction(client, prNumber, item.Comment)
 		}
 
-		resolveWithCommentAction := func(item BrowseItem) (string, error) {
-			if item.Type == "file" {
-				return "", nil // Cannot resolve a file header
-			}
-			return resolveCommentWithNoteAction(client, prNumber, item.Comment)
-		}
-
 		// Create open action (on 'o')
 		openAction := func(item BrowseItem) (string, error) {
 			if item.Type == "file" {
@@ -124,10 +117,161 @@ func runBrowse(cmd *cobra.Command, args []string) error {
 				collapsedFiles[item.Path] = !collapsedFiles[item.Path]
 				return "", nil // Just refresh
 			}
+
+			// Refresh thread comments before showing details to ensure fresh data
+			freshComments, err := client.FetchReviewComments(prNumber)
+			if err != nil {
+				// Show warning but still display detail with existing data
+				return "SHOW_DETAIL:failed to refresh comments: " + err.Error(), nil
+			}
+			for _, fresh := range freshComments {
+				if fresh.ID == item.Comment.ID {
+					item.Comment.ThreadComments = fresh.ThreadComments
+					item.Comment.SubjectType = fresh.SubjectType // Also refresh resolved status
+					break
+				}
+			}
+
 			return "SHOW_DETAIL", nil
 		}
 
-		selected, err := ui.SelectFromListWithAction(browseItems, renderer, resolveAction, "r resolve", openAction, filterFunc, onSelect, resolveWithCommentAction, "R resolve+comment")
+		// Editor actions for R (resolve with comment)
+		editorPrepareR := func(item BrowseItem) (string, error) {
+			if item.Type == "file" {
+				return "", fmt.Errorf("cannot add comment to file header")
+			}
+			if item.Comment.ThreadID == "" {
+				return "", fmt.Errorf("comment has no thread ID")
+			}
+			return "", nil // No initial content for resolve+comment
+		}
+
+		editorCompleteR := func(item BrowseItem, body string) (string, error) {
+			comment := item.Comment
+			reply, err := client.ReplyToReviewComment(prNumber, comment.ID, body)
+			if err != nil {
+				return "", fmt.Errorf("failed to add comment: %w", err)
+			}
+
+			// Add reply to local thread so it shows in details view
+			comment.ThreadComments = append(comment.ThreadComments, *reply)
+
+			// Toggle resolved state
+			statusMsg, err := resolveCommentAction(client, prNumber, comment)
+			if err != nil {
+				return "", err
+			}
+
+			if reply != nil && reply.HTMLURL != "" {
+				link := ui.CreateHyperlink(reply.HTMLURL, reply.HTMLURL)
+				return fmt.Sprintf("%s\nPosted a comment to:\n%s", statusMsg, link), nil
+			}
+
+			return statusMsg, nil
+		}
+
+		// Editor actions for Q (quote reply without context)
+		editorPrepareQ := func(item BrowseItem) (string, error) {
+			if item.Type == "file" {
+				return "", fmt.Errorf("cannot quote reply to file header")
+			}
+			comment := item.Comment
+			return ui.FormatQuotedReply(
+				comment.Author,
+				comment.Body,
+				comment.DiffHunk,
+				comment.Path,
+				false, // Don't include context
+			), nil
+		}
+
+		editorCompleteQ := func(item BrowseItem, body string) (string, error) {
+			comment := item.Comment
+			reply, err := client.ReplyToReviewComment(prNumber, comment.ID, body)
+			if err != nil {
+				return "", fmt.Errorf("failed to post reply: %w", err)
+			}
+
+			// Add reply to local thread so it shows in details view
+			comment.ThreadComments = append(comment.ThreadComments, *reply)
+
+			url := reply.HTMLURL
+			if url == "" {
+				return fmt.Sprintf("Posted comment %d", reply.ID), nil
+			}
+
+			// Show clickable hyperlink with full URL visible
+			link := ui.CreateHyperlink(url, url)
+			return fmt.Sprintf("Posted a comment to:\n%s", link), nil
+		}
+
+		// Editor actions for C (quote reply with context)
+		editorPrepareC := func(item BrowseItem) (string, error) {
+			if item.Type == "file" {
+				return "", fmt.Errorf("cannot quote reply to file header")
+			}
+			comment := item.Comment
+			return ui.FormatQuotedReply(
+				comment.Author,
+				comment.Body,
+				comment.DiffHunk,
+				comment.Path,
+				true, // Include context
+			), nil
+		}
+
+		// editorCompleteC is the same as editorCompleteQ - just post the reply
+		editorCompleteC := editorCompleteQ
+
+		// Callback to check if an item is resolved (for dynamic help text)
+		isItemResolved := func(item BrowseItem) bool {
+			if item.Type == "file" {
+				return false
+			}
+			return item.Comment.IsResolved()
+		}
+
+		// Callback to refresh items from the API
+		refreshItems := func() ([]BrowseItem, error) {
+			freshComments, err := client.FetchReviewComments(prNumber)
+			if err != nil {
+				return nil, err
+			}
+			return buildCommentTree(freshComments), nil
+		}
+
+		selected, err := ui.Select(ui.SelectorOptions[BrowseItem]{
+			Items:    browseItems,
+			Renderer: renderer,
+
+			// Core callbacks
+			OnSelect:       onSelect,
+			OnOpen:         openAction,
+			FilterFunc:     filterFunc,
+			IsItemResolved: isItemResolved,
+			RefreshItems:   refreshItems,
+
+			// r/u key: resolve/unresolve
+			ResolveAction: resolveAction,
+			ResolveKey:    "r resolve",
+			ResolveKeyAlt: "u unresolve",
+
+			// R/U key: resolve+comment via editor
+			ResolveCommentPrepare:  editorPrepareR,
+			ResolveCommentComplete: editorCompleteR,
+			ResolveCommentKey:      "R resolve+comment",
+			ResolveCommentKeyAlt:   "U unresolve+comment",
+
+			// Q key: quote reply via editor
+			QuotePrepare:  editorPrepareQ,
+			QuoteComplete: editorCompleteQ,
+			QuoteKey:      "Q quote",
+
+			// C key: quote+context via editor
+			QuoteContextPrepare:  editorPrepareC,
+			QuoteContextComplete: editorCompleteC,
+			QuoteContextKey:      "C quote+context",
+		})
 		if err != nil {
 			if errors.Is(err, ui.ErrNoSelection) {
 				return nil
@@ -370,6 +514,12 @@ func (r *browseItemRenderer) Preview(item BrowseItem) string {
 	preview.WriteString(ui.Colorize(ui.ColorCyan, fmt.Sprintf("Author: @%s\n", comment.Author)))
 	preview.WriteString(ui.Colorize(ui.ColorCyan, fmt.Sprintf("Location: %s:%d\n", comment.Path, comment.Line)))
 	preview.WriteString(ui.Colorize(ui.ColorCyan, fmt.Sprintf("Status: %s\n", ui.Colorize(statusColor, status))))
+	if comment.HTMLURL != "" {
+		preview.WriteString(ui.Colorize(ui.ColorCyan, fmt.Sprintf("URL: %s\n", ui.CreateHyperlink(comment.HTMLURL, comment.HTMLURL))))
+	}
+	if !comment.CreatedAt.IsZero() {
+		preview.WriteString(ui.Colorize(ui.ColorCyan, fmt.Sprintf("Time: %s\n", ui.FormatRelativeTime(comment.CreatedAt))))
+	}
 
 	if comment.IsOutdated {
 		preview.WriteString(ui.Colorize(ui.ColorYellow, ui.EmojiText("⚠️  OUTDATED\n", "OUTDATED\n")))
@@ -415,28 +565,9 @@ func (r *browseItemRenderer) Preview(item BrowseItem) string {
 		diffLines := strings.Split(comment.DiffHunk, "\n")
 		if len(diffLines) > 2 {
 			preview.WriteString(ui.Colorize(ui.ColorCyan, "\n--- Context ---\n"))
-			shown := 0
-			for _, line := range diffLines {
-				if shown >= 8 {
-					preview.WriteString(ui.Colorize(ui.ColorGray, "...\n"))
-					break
-				}
-				coloredLine := line
-				if len(line) > 0 {
-					switch line[0] {
-					case '+':
-						coloredLine = ui.Colorize(ui.ColorGreen, line)
-					case '-':
-						coloredLine = ui.Colorize(ui.ColorRed, line)
-					case '@':
-						coloredLine = ui.Colorize(ui.ColorCyan, line)
-					default:
-						coloredLine = ui.Colorize(ui.ColorGray, line)
-					}
-				}
-				preview.WriteString(coloredLine + "\n")
-				shown++
-			}
+			truncated := ui.TruncateDiff(comment.DiffHunk, 8)
+			preview.WriteString(ui.ColorizeDiff(truncated))
+			preview.WriteString("\n")
 		}
 	}
 
@@ -444,7 +575,17 @@ func (r *browseItemRenderer) Preview(item BrowseItem) string {
 	if len(comment.ThreadComments) > 0 {
 		preview.WriteString("\n--- Replies ---\n")
 		for i, threadComment := range comment.ThreadComments {
-			preview.WriteString(fmt.Sprintf("Reply %d by @%s:\n", i+1, threadComment.Author))
+			// Add vertical spacing before each reply
+			preview.WriteString("\n")
+			// Format: Reply N by @author | URL | time ago
+			replyHeader := fmt.Sprintf("Reply %d by @%s", i+1, threadComment.Author)
+			if threadComment.HTMLURL != "" {
+				replyHeader += fmt.Sprintf(" | %s", ui.CreateHyperlink(threadComment.HTMLURL, threadComment.HTMLURL))
+			}
+			if !threadComment.CreatedAt.IsZero() {
+				replyHeader += fmt.Sprintf(" | %s", ui.FormatRelativeTime(threadComment.CreatedAt))
+			}
+			preview.WriteString(replyHeader + "\n")
 
 			// Truncate very long replies before rendering to avoid slowness
 			replyBody := threadComment.Body
@@ -510,33 +651,4 @@ func resolveCommentAction(client *github.Client, prNumber int, comment *github.R
 		comment.SubjectType = "resolved"
 		return "Marked as resolved", nil
 	}
-}
-
-// resolveCommentWithNoteAction adds a comment before toggling resolved/unresolved state.
-func resolveCommentWithNoteAction(client *github.Client, prNumber int, comment *github.ReviewComment) (string, error) {
-	if comment.ThreadID == "" {
-		return "", fmt.Errorf("comment has no thread ID")
-	}
-
-	body, err := promptForCommentBody()
-	if err != nil {
-		return "", err
-	}
-
-	reply, err := client.ReplyToReviewComment(prNumber, comment.ID, body)
-	if err != nil {
-		return "", fmt.Errorf("failed to add comment: %w", err)
-	}
-
-	statusMsg, err := resolveCommentAction(client, prNumber, comment)
-	if err != nil {
-		return "", err
-	}
-
-	link := "comment"
-	if reply != nil && reply.HTMLURL != "" {
-		link = ui.CreateHyperlink(reply.HTMLURL, "comment")
-	}
-
-	return fmt.Sprintf("%s; added %s", statusMsg, link), nil
 }
