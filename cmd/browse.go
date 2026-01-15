@@ -4,6 +4,7 @@ import (
 	"errors"
 	"fmt"
 	"os/exec"
+	"regexp"
 	"runtime"
 	"strconv"
 	"strings"
@@ -87,7 +88,11 @@ func runBrowse(cmd *cobra.Command, args []string) error {
 			if item.Type == "file" {
 				return "", nil // Cannot open a file header
 			}
-			if err := openCommentInBrowser(client, prNumber, item.Comment.ID); err != nil {
+			// Use cached URL from initial fetch - no additional API calls
+			if item.Comment.HTMLURL == "" {
+				return "", fmt.Errorf("comment has no URL")
+			}
+			if err := openURLInBrowser(item.Comment.HTMLURL); err != nil {
 				return "", err
 			}
 			return fmt.Sprintf("Opened comment %d in browser", item.Comment.ID), nil
@@ -118,20 +123,7 @@ func runBrowse(cmd *cobra.Command, args []string) error {
 				return "", nil // Just refresh
 			}
 
-			// Refresh thread comments before showing details to ensure fresh data
-			freshComments, err := client.FetchReviewComments(prNumber)
-			if err != nil {
-				// Show warning but still display detail with existing data
-				return "SHOW_DETAIL:failed to refresh comments: " + err.Error(), nil
-			}
-			for _, fresh := range freshComments {
-				if fresh.ID == item.Comment.ID {
-					item.Comment.ThreadComments = fresh.ThreadComments
-					item.Comment.SubjectType = fresh.SubjectType // Also refresh resolved status
-					break
-				}
-			}
-
+			// Use cached data from initial fetch - no additional API calls
 			return "SHOW_DETAIL", nil
 		}
 
@@ -176,9 +168,15 @@ func runBrowse(cmd *cobra.Command, args []string) error {
 				return "", fmt.Errorf("cannot quote reply to file header")
 			}
 			comment := item.Comment
+			// Get author and body based on selected comment index
+			author, body := comment.Author, comment.Body
+			if item.SelectedCommentIdx > 0 && item.SelectedCommentIdx-1 < len(comment.ThreadComments) {
+				tc := comment.ThreadComments[item.SelectedCommentIdx-1]
+				author, body = tc.Author, tc.Body
+			}
 			return ui.FormatQuotedReply(
-				comment.Author,
-				comment.Body,
+				author,
+				body,
 				comment.DiffHunk,
 				comment.Path,
 				false, // Don't include context
@@ -211,9 +209,15 @@ func runBrowse(cmd *cobra.Command, args []string) error {
 				return "", fmt.Errorf("cannot quote reply to file header")
 			}
 			comment := item.Comment
+			// Get author and body based on selected comment index
+			author, body := comment.Author, comment.Body
+			if item.SelectedCommentIdx > 0 && item.SelectedCommentIdx-1 < len(comment.ThreadComments) {
+				tc := comment.ThreadComments[item.SelectedCommentIdx-1]
+				author, body = tc.Author, tc.Body
+			}
 			return ui.FormatQuotedReply(
-				comment.Author,
-				comment.Body,
+				author,
+				body,
 				comment.DiffHunk,
 				comment.Path,
 				true, // Include context
@@ -245,10 +249,16 @@ func runBrowse(cmd *cobra.Command, args []string) error {
 			if item.Type == "file" {
 				return "", fmt.Errorf("cannot launch agent on file header")
 			}
+			comment := item.Comment
+			// Get body based on selected comment index
+			body := comment.Body
+			if item.SelectedCommentIdx > 0 && item.SelectedCommentIdx-1 < len(comment.ThreadComments) {
+				body = comment.ThreadComments[item.SelectedCommentIdx-1].Body
+			}
 			prompt := fmt.Sprintf("Review comment on %s:%d\n\n%s",
-				item.Comment.Path,
-				item.Comment.Line,
-				item.Comment.Body)
+				comment.Path,
+				comment.Line,
+				body)
 			return "LAUNCH_AGENT:" + prompt, nil
 		}
 
@@ -345,6 +355,7 @@ func runBrowse(cmd *cobra.Command, args []string) error {
 
 func openCommentInBrowser(client *github.Client, prNumber int, commentID int64) error {
 	// Fetch review comments to find the comment URL
+	// Note: This function is only used from CLI path where we don't have cached data
 	comments, err := client.FetchReviewComments(prNumber)
 	if err != nil {
 		return fmt.Errorf("failed to fetch review comments: %w", err)
@@ -363,22 +374,22 @@ func openCommentInBrowser(client *github.Client, prNumber int, commentID int64) 
 		return fmt.Errorf("comment ID %d not found in PR #%d", commentID, prNumber)
 	}
 
-	// Open in browser (OS-agnostic)
+	return openURLInBrowser(commentURL)
+}
+
+// openURLInBrowser opens the given URL in the system's default browser
+func openURLInBrowser(url string) error {
 	var openCmd *exec.Cmd
 
 	switch runtime.GOOS {
 	case "darwin":
-		// macOS
-		openCmd = exec.Command("open", commentURL)
+		openCmd = exec.Command("open", url)
 	case "linux":
-		// Linux
-		openCmd = exec.Command("xdg-open", commentURL)
+		openCmd = exec.Command("xdg-open", url)
 	case "windows":
-		// Windows
-		openCmd = exec.Command("cmd", "/c", "start", commentURL)
+		openCmd = exec.Command("cmd", "/c", "start", url)
 	default:
-		// Fallback: try xdg-open
-		openCmd = exec.Command("xdg-open", commentURL)
+		openCmd = exec.Command("xdg-open", url)
 	}
 
 	if err := openCmd.Start(); err != nil {
@@ -390,10 +401,11 @@ func openCommentInBrowser(client *github.Client, prNumber int, commentID int64) 
 
 // BrowseItem represents an item in the browse list (either a file header or a comment)
 type BrowseItem struct {
-	Type      string // "file", "comment", "comment_preview"
-	Path      string
-	Comment   *github.ReviewComment
-	IsPreview bool
+	Type               string // "file", "comment", "comment_preview"
+	Path               string
+	Comment            *github.ReviewComment
+	IsPreview          bool
+	SelectedCommentIdx int // 0 = main comment, 1+ = thread reply index
 }
 
 // buildCommentTree converts a flat list of comments into a tree-like structure
@@ -524,6 +536,10 @@ func (r *browseItemRenderer) Description(item BrowseItem) string {
 }
 
 func (r *browseItemRenderer) Preview(item BrowseItem) string {
+	return r.PreviewWithHighlight(item, -1) // No highlight
+}
+
+func (r *browseItemRenderer) PreviewWithHighlight(item BrowseItem, highlightIdx int) string {
 	if item.Type == "file" {
 		return fmt.Sprintf("File: %s\n\nSelect a comment below to view details.", item.Path)
 	}
@@ -556,6 +572,10 @@ func (r *browseItemRenderer) Preview(item BrowseItem) string {
 	// Comment body (with markdown rendering, truncated to first 200 lines of source)
 	body := ui.StripSuggestionBlock(comment.Body)
 	if body != "" {
+		// Highlight indicator for main comment (idx 0)
+		if highlightIdx == 0 {
+			preview.WriteString(ui.Colorize(ui.ColorMagenta, "\n▶▶▶ SELECTED COMMENT ◀◀◀\n"))
+		}
 		preview.WriteString("\n--- Comment ---\n")
 
 		// Truncate very long comments before rendering to avoid slowness
@@ -573,6 +593,9 @@ func (r *browseItemRenderer) Preview(item BrowseItem) string {
 			preview.WriteString(ui.WrapText(body, 80))
 		}
 		preview.WriteString("\n")
+		if highlightIdx == 0 {
+			preview.WriteString(ui.Colorize(ui.ColorMagenta, "▶▶▶ END SELECTED ◀◀◀\n"))
+		}
 	}
 
 	// Suggested code (with syntax highlighting based on file type)
@@ -605,6 +628,13 @@ func (r *browseItemRenderer) Preview(item BrowseItem) string {
 		for i, threadComment := range comment.ThreadComments {
 			// Add vertical spacing before each reply
 			preview.WriteString("\n")
+
+			// Highlight indicator for this reply (idx = i+1)
+			isHighlighted := highlightIdx == i+1
+			if isHighlighted {
+				preview.WriteString(ui.Colorize(ui.ColorMagenta, "▶▶▶ SELECTED REPLY ◀◀◀\n"))
+			}
+
 			// Format: Reply N by @author | URL | time ago
 			replyHeader := fmt.Sprintf("Reply %d by @%s", i+1, threadComment.Author)
 			if threadComment.HTMLURL != "" {
@@ -630,6 +660,10 @@ func (r *browseItemRenderer) Preview(item BrowseItem) string {
 				preview.WriteString(ui.WrapText(replyBody, 80))
 			}
 			preview.WriteString("\n")
+
+			if isHighlighted {
+				preview.WriteString(ui.Colorize(ui.ColorMagenta, "▶▶▶ END SELECTED ◀◀◀\n"))
+			}
 		}
 	}
 
@@ -656,6 +690,64 @@ func (r *browseItemRenderer) FilterValue(item BrowseItem) string {
 
 func (r *browseItemRenderer) IsSkippable(item BrowseItem) bool {
 	return item.IsPreview
+}
+
+func (r *browseItemRenderer) ThreadCommentCount(item BrowseItem) int {
+	if item.Type == "file" || item.Comment == nil {
+		return 0
+	}
+	return 1 + len(item.Comment.ThreadComments) // main + replies
+}
+
+func (r *browseItemRenderer) ThreadCommentPreview(item BrowseItem, idx int) string {
+	if item.Comment == nil {
+		return ""
+	}
+	var author, body string
+	if idx == 0 {
+		author = item.Comment.Author
+		body = item.Comment.Body
+	} else if idx-1 < len(item.Comment.ThreadComments) {
+		tc := item.Comment.ThreadComments[idx-1]
+		author = tc.Author
+		body = tc.Body
+	}
+
+	// Strip markdown images ![alt](url) and convert links [text](url) to just text
+	body = stripMarkdownForPreview(body)
+
+	// Skip quoted lines (starting with ">") to show the actual comment content
+	var nonQuotedLines []string
+	for _, line := range strings.Split(body, "\n") {
+		trimmed := strings.TrimSpace(line)
+		if trimmed != "" && !strings.HasPrefix(trimmed, ">") {
+			nonQuotedLines = append(nonQuotedLines, trimmed)
+		}
+	}
+	body = strings.Join(nonQuotedLines, " ")
+	// Truncate to ~100 chars
+	if len(body) > 100 {
+		body = body[:97] + "..."
+	}
+	return fmt.Sprintf("@%s: %s", author, body)
+}
+
+func (r *browseItemRenderer) WithSelectedComment(item BrowseItem, idx int) BrowseItem {
+	item.SelectedCommentIdx = idx
+	return item
+}
+
+// stripMarkdownForPreview removes images and converts links to plain text
+func stripMarkdownForPreview(text string) string {
+	// Remove markdown images ![alt](url)
+	imageRe := regexp.MustCompile(`!\[.*?\]\(.*?\)`)
+	text = imageRe.ReplaceAllString(text, "")
+
+	// Convert markdown links [text](url) to just text
+	linkRe := regexp.MustCompile(`\[([^\]]*)\]\([^)]*\)`)
+	text = linkRe.ReplaceAllString(text, "$1")
+
+	return strings.TrimSpace(text)
 }
 
 // resolveCommentAction resolves a review comment thread

@@ -310,6 +310,75 @@ func TestCreateHyperlink(t *testing.T) {
 	}
 }
 
+func TestRenderMarkdownCaching(t *testing.T) {
+	// Save original state and restore after test
+	originalEnabled := colorEnabled
+	originalRenderer := cachedMarkdownRenderer
+	defer func() {
+		colorEnabled = originalEnabled
+		cachedMarkdownRenderer = originalRenderer
+	}()
+
+	colorEnabled = true
+	cachedMarkdownRenderer = nil // Reset cache
+
+	// First call should create the renderer
+	result1, err := RenderMarkdown("**bold**")
+	if err != nil {
+		t.Fatalf("RenderMarkdown returned error: %v", err)
+	}
+	if result1 == "" {
+		t.Error("RenderMarkdown returned empty result")
+	}
+
+	// Capture the cached renderer
+	firstRenderer := cachedMarkdownRenderer
+	if firstRenderer == nil {
+		t.Fatal("cachedMarkdownRenderer should be set after first call")
+	}
+
+	// Second call should reuse the same renderer
+	result2, err := RenderMarkdown("_italic_")
+	if err != nil {
+		t.Fatalf("RenderMarkdown returned error: %v", err)
+	}
+	if result2 == "" {
+		t.Error("RenderMarkdown returned empty result")
+	}
+
+	// Verify the same renderer is used (not recreated)
+	if cachedMarkdownRenderer != firstRenderer {
+		t.Error("cachedMarkdownRenderer should be reused, not recreated")
+	}
+}
+
+func TestRenderMarkdownEmptyInput(t *testing.T) {
+	result, err := RenderMarkdown("")
+	if err != nil {
+		t.Errorf("RenderMarkdown(\"\") returned error: %v", err)
+	}
+	if result != "" {
+		t.Errorf("RenderMarkdown(\"\") = %q, want empty string", result)
+	}
+}
+
+func TestRenderMarkdownColorsDisabled(t *testing.T) {
+	// Save original state and restore after test
+	originalEnabled := colorEnabled
+	defer func() { colorEnabled = originalEnabled }()
+
+	colorEnabled = false
+
+	result, err := RenderMarkdown("**bold** text")
+	if err != nil {
+		t.Errorf("RenderMarkdown returned error: %v", err)
+	}
+	// When colors are disabled, should return trimmed plain text
+	if result != "**bold** text" {
+		t.Errorf("RenderMarkdown with colors disabled = %q, want %q", result, "**bold** text")
+	}
+}
+
 func TestFormatRelativeTime(t *testing.T) {
 	now := time.Now()
 
