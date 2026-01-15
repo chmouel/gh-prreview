@@ -22,6 +22,9 @@ type ItemRenderer[T any] interface {
 	Description(item T) string
 	// Preview returns detailed preview text for an item
 	Preview(item T) string
+	// PreviewWithHighlight returns detailed preview text with a specific comment highlighted
+	// highlightIdx: 0 = main comment, 1+ = thread replies. -1 = no highlight.
+	PreviewWithHighlight(item T, highlightIdx int) string
 	// EditPath returns the file path to open in editor (optional)
 	EditPath(item T) string
 	// EditLine returns the line number to go to in editor (1-based, optional)
@@ -30,6 +33,14 @@ type ItemRenderer[T any] interface {
 	FilterValue(item T) string
 	// IsSkippable returns true if the item should be skipped during navigation
 	IsSkippable(item T) bool
+	// ThreadCommentCount returns the number of comments in this item's thread
+	// (1 = main only, >1 = main + replies). Return 0 if not applicable.
+	ThreadCommentCount(item T) int
+	// ThreadCommentPreview returns a preview string for the comment at index
+	// (0 = main comment, 1+ = thread replies)
+	ThreadCommentPreview(item T, idx int) string
+	// WithSelectedComment returns a copy of item with the selected comment index set
+	WithSelectedComment(item T, idx int) T
 }
 
 // CustomAction is a function that handles custom actions on items
@@ -133,6 +144,14 @@ type SelectionModel[T any] struct {
 
 	// Loading state for detail view
 	loadingDetail bool
+
+	// Comment selection mode state (for cycling through thread comments)
+	commentSelectMode       bool        // true when cycling through comments
+	commentSelectAction     string      // "Q", "C", or "a" - which action triggered selection
+	commentSelectIdx        int         // current index (0 = main, 1+ = thread replies)
+	commentSelectItem       listItem[T] // the item being operated on
+	commentSelectStatus     string      // status message to display during selection
+	commentSelectInDetail   bool        // true if selection was triggered from detail view
 }
 
 // Item wraps a generic item for the list model
@@ -348,6 +367,25 @@ func (m *SelectionModel[T]) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 	if m.showDetail {
 		switch msg := msg.(type) {
 		case tea.KeyMsg:
+			// Handle comment selection mode
+			if m.commentSelectMode {
+				switch msg.String() {
+				case "enter":
+					// Confirm selection and execute the action
+					m.commentSelectMode = false
+					return m.executeCommentAction()
+				case "esc":
+					m.exitCommentSelectMode()
+					return m, m.list.NewStatusMessage("Selection cancelled")
+				case "Q", "C", "a":
+					if msg.String() == m.commentSelectAction {
+						m.cycleCommentSelection()
+						return m, nil
+					}
+					// Different action - cancel current and fall through to handle new action
+					m.exitCommentSelectMode()
+				}
+			}
 			switch msg.String() {
 			case "esc", "backspace", "left", "h", "q":
 				m.showDetail = false
@@ -399,6 +437,11 @@ func (m *SelectionModel[T]) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 				selected := m.list.SelectedItem()
 				if selected != nil {
 					item := selected.(listItem[T])
+					// Check if thread has multiple comments
+					if count := m.opts.Renderer.ThreadCommentCount(item.value); count > 1 {
+						m.enterCommentSelectMode("Q", item)
+						return m, nil
+					}
 					m.showDetail = false
 					// Use editor action if available
 					if m.opts.QuotePrepare != nil {
@@ -415,6 +458,11 @@ func (m *SelectionModel[T]) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 				selected := m.list.SelectedItem()
 				if selected != nil {
 					item := selected.(listItem[T])
+					// Check if thread has multiple comments
+					if count := m.opts.Renderer.ThreadCommentCount(item.value); count > 1 {
+						m.enterCommentSelectMode("C", item)
+						return m, nil
+					}
 					m.showDetail = false
 					// Use editor action if available
 					if m.opts.QuoteContextPrepare != nil {
@@ -432,6 +480,11 @@ func (m *SelectionModel[T]) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 					selected := m.list.SelectedItem()
 					if selected != nil {
 						item := selected.(listItem[T])
+						// Check if thread has multiple comments
+						if count := m.opts.Renderer.ThreadCommentCount(item.value); count > 1 {
+							m.enterCommentSelectMode("a", item)
+							return m, nil
+						}
 						m.showDetail = false
 						result, err := m.opts.AgentAction(item.value)
 						if err != nil {
@@ -522,6 +575,26 @@ func (m *SelectionModel[T]) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		// If we are filtering, let the list handle the input
 		if m.list.FilterState() == list.Filtering {
 			break
+		}
+
+		// Handle comment selection mode in list view
+		if m.commentSelectMode {
+			switch msg.String() {
+			case "enter":
+				// Confirm selection and execute the action
+				m.commentSelectMode = false
+				return m.executeCommentAction()
+			case "esc":
+				m.exitCommentSelectMode()
+				return m, m.list.NewStatusMessage("Selection cancelled")
+			case "Q", "C", "a":
+				if msg.String() == m.commentSelectAction {
+					m.cycleCommentSelection()
+					return m, nil
+				}
+				// Different action - cancel current and fall through to handle new action
+				m.exitCommentSelectMode()
+			}
 		}
 
 		switch msg.String() {
@@ -677,6 +750,11 @@ func (m *SelectionModel[T]) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			selected := m.list.SelectedItem()
 			if selected != nil {
 				item := selected.(listItem[T])
+				// Check if thread has multiple comments
+				if count := m.opts.Renderer.ThreadCommentCount(item.value); count > 1 {
+					m.enterCommentSelectMode("Q", item)
+					return m, nil
+				}
 				// Use editor action if available
 				if m.opts.QuotePrepare != nil {
 					initialContent, err := m.opts.QuotePrepare(item.value)
@@ -692,6 +770,11 @@ func (m *SelectionModel[T]) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			selected := m.list.SelectedItem()
 			if selected != nil {
 				item := selected.(listItem[T])
+				// Check if thread has multiple comments
+				if count := m.opts.Renderer.ThreadCommentCount(item.value); count > 1 {
+					m.enterCommentSelectMode("C", item)
+					return m, nil
+				}
 				// Use editor action if available
 				if m.opts.QuoteContextPrepare != nil {
 					initialContent, err := m.opts.QuoteContextPrepare(item.value)
@@ -708,6 +791,11 @@ func (m *SelectionModel[T]) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 				selected := m.list.SelectedItem()
 				if selected != nil {
 					item := selected.(listItem[T])
+					// Check if thread has multiple comments
+					if count := m.opts.Renderer.ThreadCommentCount(item.value); count > 1 {
+						m.enterCommentSelectMode("a", item)
+						return m, nil
+					}
 					result, err := m.opts.AgentAction(item.value)
 					if err != nil {
 						return m, m.list.NewStatusMessage(Colorize(ColorRed, err.Error()))
@@ -1005,6 +1093,19 @@ func (m *SelectionModel[T]) View() string {
 				Foreground(lipgloss.Color("252")).
 				Italic(true)
 		}
+
+		// Show comment selection status if active, otherwise show regular footer
+		if m.commentSelectMode && m.commentSelectStatus != "" {
+			statusStyle := lipgloss.NewStyle()
+			if ColorsEnabled() {
+				statusStyle = statusStyle.
+					Foreground(lipgloss.Color("214")). // Orange
+					Bold(true)
+			}
+			footer := statusStyle.Render(m.commentSelectStatus)
+			return lipgloss.JoinVertical(lipgloss.Left, m.viewport.View(), footer)
+		}
+
 		// Dynamic help based on resolved state
 		resolveKey := m.getResolveActionKey()
 		resolveKeySecond := m.getResolveActionKeySecond()
@@ -1053,12 +1154,34 @@ func (m *SelectionModel[T]) View() string {
 		m.list.View(),
 	)
 
-	// Bottom: help text
-	content := lipgloss.JoinVertical(
-		lipgloss.Top,
-		listSection,
-		help,
-	)
+	// Comment selection status (shown when cycling through thread comments)
+	var statusLine string
+	if m.commentSelectMode && m.commentSelectStatus != "" {
+		statusStyle := lipgloss.NewStyle()
+		if ColorsEnabled() {
+			statusStyle = statusStyle.
+				Foreground(lipgloss.Color("214")). // Orange
+				Bold(true)
+		}
+		statusLine = statusStyle.Render(m.commentSelectStatus)
+	}
+
+	// Bottom: status (if any) + help text
+	var content string
+	if statusLine != "" {
+		content = lipgloss.JoinVertical(
+			lipgloss.Top,
+			listSection,
+			statusLine,
+			help,
+		)
+	} else {
+		content = lipgloss.JoinVertical(
+			lipgloss.Top,
+			listSection,
+			help,
+		)
+	}
 
 	return content
 }
@@ -1365,4 +1488,120 @@ func (d itemDelegate[T]) Render(w io.Writer, m list.Model, index int, item list.
 	}
 
 	_, _ = fmt.Fprint(w, s.String())
+}
+
+// enterCommentSelectMode starts the comment selection cycling mode
+func (m *SelectionModel[T]) enterCommentSelectMode(action string, item listItem[T]) {
+	m.commentSelectMode = true
+	m.commentSelectAction = action
+	m.commentSelectIdx = 0
+	m.commentSelectItem = item
+	m.commentSelectInDetail = m.showDetail // Remember if we started from detail view
+
+	if m.showDetail {
+		// Stay in detail view and update viewport with highlighted content
+		m.updateDetailViewWithHighlight()
+	}
+	m.showCommentSelectStatus()
+}
+
+// cycleCommentSelection advances to the next comment in the thread
+func (m *SelectionModel[T]) cycleCommentSelection() {
+	count := m.opts.Renderer.ThreadCommentCount(m.commentSelectItem.value)
+	m.commentSelectIdx = (m.commentSelectIdx + 1) % count
+
+	if m.commentSelectInDetail && m.showDetail {
+		// Update detail view with new highlight
+		m.updateDetailViewWithHighlight()
+	}
+	m.showCommentSelectStatus()
+}
+
+// showCommentSelectStatus updates the comment selection status message
+func (m *SelectionModel[T]) showCommentSelectStatus() {
+	count := m.opts.Renderer.ThreadCommentCount(m.commentSelectItem.value)
+	preview := m.opts.Renderer.ThreadCommentPreview(m.commentSelectItem.value, m.commentSelectIdx)
+	m.commentSelectStatus = fmt.Sprintf("[%d/%d] %s (Enter=select, %s=next, Esc=cancel)",
+		m.commentSelectIdx+1, count, preview, m.commentSelectAction)
+}
+
+// exitCommentSelectMode clears the comment selection state
+func (m *SelectionModel[T]) exitCommentSelectMode() {
+	m.commentSelectMode = false
+	m.commentSelectAction = ""
+	m.commentSelectIdx = 0
+	m.commentSelectStatus = ""
+	m.commentSelectInDetail = false
+}
+
+// updateDetailViewWithHighlight refreshes the detail viewport with highlighted comment
+func (m *SelectionModel[T]) updateDetailViewWithHighlight() {
+	content := m.opts.Renderer.PreviewWithHighlight(m.commentSelectItem.value, m.commentSelectIdx)
+	wrappedContent := WrapText(content, m.viewport.Width)
+	m.viewport.SetContent(wrappedContent)
+
+	// Scroll to the highlighted comment
+	// Find the line with the highlight marker and scroll to it
+	lines := strings.Split(wrappedContent, "\n")
+	for i, line := range lines {
+		if strings.Contains(line, "▶▶▶") {
+			// Scroll so the highlighted comment is near the top of the viewport
+			// Leave a few lines of context above if possible
+			targetLine := i - 2
+			if targetLine < 0 {
+				targetLine = 0
+			}
+			m.viewport.SetYOffset(targetLine)
+			break
+		}
+	}
+}
+
+// executeCommentAction executes the pending action with the selected comment
+func (m *SelectionModel[T]) executeCommentAction() (tea.Model, tea.Cmd) {
+	item := m.commentSelectItem
+	// Use interface method to set selected comment index
+	item.value = m.opts.Renderer.WithSelectedComment(item.value, m.commentSelectIdx)
+	action := m.commentSelectAction
+	m.exitCommentSelectMode()
+
+	// Hide detail view if we were in it
+	m.showDetail = false
+
+	switch action {
+	case "Q":
+		// Use editor action if available
+		if m.opts.QuotePrepare != nil {
+			initialContent, err := m.opts.QuotePrepare(item.value)
+			if err != nil {
+				return m, m.list.NewStatusMessage(Colorize(ColorRed, err.Error()))
+			}
+			return m, m.startEditorForAction(item.value, 3, initialContent)
+		}
+	case "C":
+		// Use editor action if available
+		if m.opts.QuoteContextPrepare != nil {
+			initialContent, err := m.opts.QuoteContextPrepare(item.value)
+			if err != nil {
+				return m, m.list.NewStatusMessage(Colorize(ColorRed, err.Error()))
+			}
+			return m, m.startEditorForAction(item.value, 4, initialContent)
+		}
+	case "a":
+		// Launch coding agent
+		if m.opts.AgentAction != nil {
+			result, err := m.opts.AgentAction(item.value)
+			if err != nil {
+				return m, m.list.NewStatusMessage(Colorize(ColorRed, err.Error()))
+			}
+			if strings.HasPrefix(result, "LAUNCH_AGENT:") {
+				prompt := strings.TrimPrefix(result, "LAUNCH_AGENT:")
+				return m, m.launchAgent(prompt)
+			}
+			if result != "" {
+				return m, m.list.NewStatusMessage(result)
+			}
+		}
+	}
+	return m, nil
 }

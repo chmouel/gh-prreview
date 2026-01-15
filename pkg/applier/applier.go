@@ -858,6 +858,10 @@ func (r *suggestionRenderer) Description(comment *github.ReviewComment) string {
 }
 
 func (r *suggestionRenderer) Preview(comment *github.ReviewComment) string {
+	return r.PreviewWithHighlight(comment, -1) // No highlight
+}
+
+func (r *suggestionRenderer) PreviewWithHighlight(comment *github.ReviewComment, highlightIdx int) string {
 	var preview strings.Builder
 	maxLines := 20 // Limit preview to fit screen
 
@@ -1000,4 +1004,16 @@ func (r *suggestionRenderer) FilterValue(comment *github.ReviewComment) string {
 
 func (r *suggestionRenderer) IsSkippable(comment *github.ReviewComment) bool {
 	return false
+}
+
+func (r *suggestionRenderer) ThreadCommentCount(comment *github.ReviewComment) int {
+	return 0 // Not used in applier context
+}
+
+func (r *suggestionRenderer) ThreadCommentPreview(comment *github.ReviewComment, idx int) string {
+	return "" // Not used in applier context
+}
+
+func (r *suggestionRenderer) WithSelectedComment(comment *github.ReviewComment, idx int) *github.ReviewComment {
+	return comment // No-op in applier context
 }

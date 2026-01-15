@@ -34,6 +34,10 @@ func (r *prItemRenderer) Description(pr *github.PullRequest) string {
 }
 
 func (r *prItemRenderer) Preview(pr *github.PullRequest) string {
+	return r.PreviewWithHighlight(pr, -1)
+}
+
+func (r *prItemRenderer) PreviewWithHighlight(pr *github.PullRequest, highlightIdx int) string {
 	var preview strings.Builder
 
 	// Header
@@ -73,6 +77,18 @@ func (r *prItemRenderer) EditLine(pr *github.PullRequest) int {
 
 func (r *prItemRenderer) IsSkippable(pr *github.PullRequest) bool {
 	return false // No skippable items in PR list (description is part of Title rendering)
+}
+
+func (r *prItemRenderer) ThreadCommentCount(pr *github.PullRequest) int {
+	return 0 // Not applicable for PRs
+}
+
+func (r *prItemRenderer) ThreadCommentPreview(pr *github.PullRequest, idx int) string {
+	return "" // Not applicable for PRs
+}
+
+func (r *prItemRenderer) WithSelectedComment(pr *github.PullRequest, idx int) *github.PullRequest {
+	return pr // No-op for PRs
 }
 
 // formatReviewStatus formats the review decision with appropriate color and emoji

@@ -13,15 +13,19 @@ import (
 )
 
 const (
-	ColorReset  = "\033[0m"
-	ColorRed    = "\033[31m"
-	ColorGreen  = "\033[32m"
-	ColorYellow = "\033[33m"
-	ColorCyan   = "\033[36m"
-	ColorGray   = "\033[90m"
+	ColorReset   = "\033[0m"
+	ColorRed     = "\033[31m"
+	ColorGreen   = "\033[32m"
+	ColorYellow  = "\033[33m"
+	ColorMagenta = "\033[35m"
+	ColorCyan    = "\033[36m"
+	ColorGray    = "\033[90m"
 )
 
 var colorEnabled = true
+
+// Cached glamour renderer for markdown rendering (created once, reused)
+var cachedMarkdownRenderer *glamour.TermRenderer
 
 // SetColorEnabled toggles ANSI color output across the UI helpers.
 func SetColorEnabled(enabled bool) {
@@ -29,6 +33,8 @@ func SetColorEnabled(enabled bool) {
 	if !enabled {
 		lipgloss.SetColorProfile(termenv.Ascii)
 	}
+	// Reset cached renderer when color setting changes
+	cachedMarkdownRenderer = nil
 }
 
 // ColorsEnabled reports whether ANSI colors are enabled.
@@ -136,6 +142,32 @@ func WrapText(text string, width int) string {
 	return wordwrap.String(text, width)
 }
 
+// getMarkdownRenderer returns a cached glamour renderer, creating it once if needed
+func getMarkdownRenderer() *glamour.TermRenderer {
+	if cachedMarkdownRenderer != nil {
+		return cachedMarkdownRenderer
+	}
+
+	// Create renderer once and cache it
+	r, err := glamour.NewTermRenderer(
+		glamour.WithAutoStyle(),
+		glamour.WithWordWrap(80),
+	)
+	if err != nil {
+		// Try fallback to dark style
+		r, err = glamour.NewTermRenderer(
+			glamour.WithStandardStyle("dark"),
+			glamour.WithWordWrap(80),
+		)
+	}
+	if err != nil {
+		return nil
+	}
+
+	cachedMarkdownRenderer = r
+	return cachedMarkdownRenderer
+}
+
 // RenderMarkdown renders markdown text with glamour
 func RenderMarkdown(text string) (string, error) {
 	if text == "" {
@@ -146,21 +178,9 @@ func RenderMarkdown(text string) (string, error) {
 		return strings.TrimSpace(text), nil
 	}
 
-	// Create a glamour renderer
-	// Try auto-style first
-	r, err := glamour.NewTermRenderer(
-		glamour.WithAutoStyle(),
-		glamour.WithWordWrap(80),
-	)
-	// If auto-style fails, fallback to dark style
-	if err != nil {
-		r, err = glamour.NewTermRenderer(
-			glamour.WithStandardStyle("dark"),
-			glamour.WithWordWrap(80),
-		)
-	}
-	if err != nil {
-		// Fallback to plain text if rendering fails
+	r := getMarkdownRenderer()
+	if r == nil {
+		// Fallback to plain text if renderer creation failed
 		return text, nil
 	}
 
