@@ -14,6 +14,12 @@ import (
 	"github.com/spf13/cobra"
 )
 
+// Pre-compiled regexes for markdown stripping (avoids recompilation on each call)
+var (
+	markdownImageRe = regexp.MustCompile(`!\[.*?\]\(.*?\)`)
+	markdownLinkRe  = regexp.MustCompile(`\[([^\]]*)\]\([^)]*\)`)
+)
+
 var browseDebug bool
 
 var browseCmd = &cobra.Command{
@@ -33,6 +39,13 @@ func init() {
 }
 
 func runBrowse(cmd *cobra.Command, args []string) error {
+	// Enable UI debug output if requested
+	ui.SetUIDebug(browseDebug)
+
+	// Start warming up the markdown renderer in the background
+	// This initializes glamour/chroma before the user needs it
+	ui.WarmupMarkdownRenderer()
+
 	client := github.NewClient()
 	client.SetDebug(browseDebug)
 	if repoFlag != "" {
@@ -740,12 +753,10 @@ func (r *browseItemRenderer) WithSelectedComment(item BrowseItem, idx int) Brows
 // stripMarkdownForPreview removes images and converts links to plain text
 func stripMarkdownForPreview(text string) string {
 	// Remove markdown images ![alt](url)
-	imageRe := regexp.MustCompile(`!\[.*?\]\(.*?\)`)
-	text = imageRe.ReplaceAllString(text, "")
+	text = markdownImageRe.ReplaceAllString(text, "")
 
 	// Convert markdown links [text](url) to just text
-	linkRe := regexp.MustCompile(`\[([^\]]*)\]\([^)]*\)`)
-	text = linkRe.ReplaceAllString(text, "$1")
+	text = markdownLinkRe.ReplaceAllString(text, "$1")
 
 	return strings.TrimSpace(text)
 }

@@ -2,8 +2,10 @@ package ui
 
 import (
 	"fmt"
+	"os"
 	"regexp"
 	"strings"
+	"sync"
 	"time"
 
 	"github.com/charmbracelet/glamour"
@@ -23,9 +25,42 @@ const (
 )
 
 var colorEnabled = true
+var uiDebug = false
+
+// SetUIDebug enables debug timing output for UI operations.
+func SetUIDebug(enabled bool) {
+	uiDebug = enabled
+}
 
 // Cached glamour renderer for markdown rendering (created once, reused)
 var cachedMarkdownRenderer *glamour.TermRenderer
+var rendererInitOnce sync.Once
+
+// Pre-compiled regexes for StripSuggestionBlock (avoids recompilation on each call)
+var (
+	suggestionBlockRe = regexp.MustCompile("(?s)```suggestion\\s*\\n.*?```")
+	imageMarkdownRe   = regexp.MustCompile(`!\[.*?\]\(.*?\)`)
+)
+
+// WarmupMarkdownRenderer initializes the markdown renderer and warms up the
+// syntax highlighting system in the background. Call this early in the app
+// lifecycle to avoid delays on first render.
+func WarmupMarkdownRenderer() {
+	go func() {
+		start := time.Now()
+		// Initialize the renderer (this creates glamour's TermRenderer)
+		r := getMarkdownRenderer()
+		if r != nil {
+			// Warm up chroma's lexers by rendering some code blocks
+			// This triggers lazy initialization of syntax highlighters
+			_, _ = r.Render("```go\nfunc main() {}\n```")
+			_, _ = r.Render("```js\nconst x = 1;\n```")
+		}
+		if uiDebug {
+			fmt.Fprintf(os.Stderr, "[DEBUG] Markdown warmup completed in %v\n", time.Since(start))
+		}
+	}()
+}
 
 // SetColorEnabled toggles ANSI color output across the UI helpers.
 func SetColorEnabled(enabled bool) {
@@ -127,12 +162,10 @@ func StripSuggestionBlock(body string) string {
 	result := strings.TrimSpace(body)
 
 	// Remove ```suggestion...``` blocks
-	suggestionRe := regexp.MustCompile("(?s)```suggestion\\s*\\n.*?```")
-	result = suggestionRe.ReplaceAllString(result, "")
+	result = suggestionBlockRe.ReplaceAllString(result, "")
 
 	// Remove markdown image links like ![alt](url)
-	imageRe := regexp.MustCompile(`!\[.*?\]\(.*?\)`)
-	result = imageRe.ReplaceAllString(result, "")
+	result = imageMarkdownRe.ReplaceAllString(result, "")
 
 	return strings.TrimSpace(result)
 }
@@ -144,27 +177,26 @@ func WrapText(text string, width int) string {
 
 // getMarkdownRenderer returns a cached glamour renderer, creating it once if needed
 func getMarkdownRenderer() *glamour.TermRenderer {
-	if cachedMarkdownRenderer != nil {
-		return cachedMarkdownRenderer
-	}
-
-	// Create renderer once and cache it
-	r, err := glamour.NewTermRenderer(
-		glamour.WithAutoStyle(),
-		glamour.WithWordWrap(80),
-	)
-	if err != nil {
-		// Try fallback to dark style
-		r, err = glamour.NewTermRenderer(
+	rendererInitOnce.Do(func() {
+		var start time.Time
+		if uiDebug {
+			start = time.Now()
+			fmt.Fprintf(os.Stderr, "[DEBUG] Creating glamour renderer...\n")
+		}
+		// Create renderer once and cache it
+		// Use dark style directly instead of WithAutoStyle() which can be slow
+		// due to terminal capability detection
+		r, err := glamour.NewTermRenderer(
 			glamour.WithStandardStyle("dark"),
 			glamour.WithWordWrap(80),
 		)
-	}
-	if err != nil {
-		return nil
-	}
-
-	cachedMarkdownRenderer = r
+		if err == nil {
+			cachedMarkdownRenderer = r
+		}
+		if uiDebug {
+			fmt.Fprintf(os.Stderr, "[DEBUG] Glamour renderer created in %v\n", time.Since(start))
+		}
+	})
 	return cachedMarkdownRenderer
 }
 
@@ -184,7 +216,17 @@ func RenderMarkdown(text string) (string, error) {
 		return text, nil
 	}
 
+	var start time.Time
+	if uiDebug {
+		start = time.Now()
+	}
+
 	rendered, err := r.Render(text)
+
+	if uiDebug {
+		fmt.Fprintf(os.Stderr, "[DEBUG] RenderMarkdown took %v for %d bytes\n", time.Since(start), len(text))
+	}
+
 	if err != nil {
 		// Fallback to plain text if rendering fails
 		return text, nil

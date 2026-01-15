@@ -313,16 +313,15 @@ func TestCreateHyperlink(t *testing.T) {
 func TestRenderMarkdownCaching(t *testing.T) {
 	// Save original state and restore after test
 	originalEnabled := colorEnabled
-	originalRenderer := cachedMarkdownRenderer
 	defer func() {
 		colorEnabled = originalEnabled
-		cachedMarkdownRenderer = originalRenderer
+		// Note: We do NOT restore cachedMarkdownRenderer because sync.Once
+		// has already run. Restoring it to nil would break subsequent tests.
 	}()
 
 	colorEnabled = true
-	cachedMarkdownRenderer = nil // Reset cache
 
-	// First call should create the renderer
+	// First call should create or reuse the renderer
 	result1, err := RenderMarkdown("**bold**")
 	if err != nil {
 		t.Fatalf("RenderMarkdown returned error: %v", err)
@@ -376,6 +375,77 @@ func TestRenderMarkdownColorsDisabled(t *testing.T) {
 	// When colors are disabled, should return trimmed plain text
 	if result != "**bold** text" {
 		t.Errorf("RenderMarkdown with colors disabled = %q, want %q", result, "**bold** text")
+	}
+}
+
+func TestSetUIDebug(t *testing.T) {
+	// Save original state and restore after test
+	originalDebug := uiDebug
+	defer func() { uiDebug = originalDebug }()
+
+	// Test enabling debug
+	SetUIDebug(true)
+	if !uiDebug {
+		t.Error("SetUIDebug(true) should set uiDebug to true")
+	}
+
+	// Test disabling debug
+	SetUIDebug(false)
+	if uiDebug {
+		t.Error("SetUIDebug(false) should set uiDebug to false")
+	}
+}
+
+func TestWarmupMarkdownRenderer(t *testing.T) {
+	// Save original state and restore after test
+	originalEnabled := colorEnabled
+	originalDebug := uiDebug
+	defer func() {
+		colorEnabled = originalEnabled
+		uiDebug = originalDebug
+	}()
+
+	colorEnabled = true
+	uiDebug = false // Disable debug to avoid stderr output
+
+	// Call warmup - it runs in a goroutine and should not panic
+	// Note: sync.Once means the renderer may already be initialized from other tests
+	WarmupMarkdownRenderer()
+
+	// Give the goroutine time to complete
+	time.Sleep(100 * time.Millisecond)
+
+	// After warmup (or if already initialized), the renderer should be cached
+	// We can't reset sync.Once, so we just verify it doesn't panic and the
+	// renderer is non-nil after the call
+	if cachedMarkdownRenderer == nil {
+		t.Error("cachedMarkdownRenderer should be initialized after WarmupMarkdownRenderer")
+	}
+}
+
+func TestGetMarkdownRenderer(t *testing.T) {
+	// Save original state and restore after test
+	originalEnabled := colorEnabled
+	originalDebug := uiDebug
+	defer func() {
+		colorEnabled = originalEnabled
+		uiDebug = originalDebug
+	}()
+
+	colorEnabled = true
+	uiDebug = false // Disable debug output
+
+	// Note: sync.Once means the renderer may already be initialized from other tests
+	// We test that getMarkdownRenderer returns a consistent non-nil value
+	r := getMarkdownRenderer()
+	if r == nil {
+		t.Error("getMarkdownRenderer should return a non-nil renderer when colors are enabled")
+	}
+
+	// Calling again should return the same instance (cached)
+	r2 := getMarkdownRenderer()
+	if r2 != r {
+		t.Error("getMarkdownRenderer should return the same cached instance")
 	}
 }
 
