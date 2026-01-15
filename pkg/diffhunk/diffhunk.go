@@ -7,6 +7,12 @@ import (
 	"strings"
 )
 
+// Pre-compiled regexes for diff parsing (avoids recompilation on each call)
+var (
+	diffHeaderRe = regexp.MustCompile(`^@@\s+-(\d+)(?:,(\d+))?\s+\+(\d+)(?:,(\d+))?\s+@@`)
+	hunkSplitRe  = regexp.MustCompile(`(?m)^@@[^@]+@@`)
+)
+
 // DiffChangeType represents the type of change in a diff line
 type DiffChangeType int
 
@@ -48,8 +54,7 @@ func ParseDiffHunk(hunk string) (*DiffHunk, error) {
 	}
 
 	// Parse header line: @@ -oldStart,oldLines +newStart,newLines @@
-	headerRegex := regexp.MustCompile(`^@@\s+-(\d+)(?:,(\d+))?\s+\+(\d+)(?:,(\d+))?\s+@@`)
-	matches := headerRegex.FindStringSubmatch(lines[0])
+	matches := diffHeaderRe.FindStringSubmatch(lines[0])
 	if matches == nil {
 		return nil, fmt.Errorf("invalid diff hunk header: %s", lines[0])
 	}
@@ -128,8 +133,7 @@ func ParseDiffHunk(hunk string) (*DiffHunk, error) {
 // ParsePatch parses a complete unified diff patch into multiple hunks
 func ParsePatch(patch string) ([]*DiffHunk, error) {
 	// Split by hunk headers
-	hunkRegex := regexp.MustCompile(`(?m)^@@[^@]+@@`)
-	indices := hunkRegex.FindAllStringIndex(patch, -1)
+	indices := hunkSplitRe.FindAllStringIndex(patch, -1)
 
 	if len(indices) == 0 {
 		return nil, fmt.Errorf("no hunks found in patch")

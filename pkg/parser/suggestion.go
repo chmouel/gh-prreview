@@ -5,15 +5,16 @@ import (
 	"strings"
 )
 
+// Pre-compiled regex for suggestion parsing (avoids recompilation on each call)
+var suggestionRe = regexp.MustCompile("(?s)```suggestion\\s*\\n(.*?)```")
+
 // ParseSuggestion extracts the suggested code from a GitHub review comment body
 // GitHub suggestions are in the format:
 // ```suggestion
 // suggested code here
 // ```
 func ParseSuggestion(body string) string {
-	// Match code blocks with "suggestion" language
-	re := regexp.MustCompile("(?s)```suggestion\\s*\\n(.*?)```")
-	matches := re.FindStringSubmatch(body)
+	matches := suggestionRe.FindStringSubmatch(body)
 
 	if len(matches) < 2 {
 		return ""
@@ -24,8 +25,7 @@ func ParseSuggestion(body string) string {
 
 // ParseMultipleSuggestions extracts all suggestions from a comment body
 func ParseMultipleSuggestions(body string) []string {
-	re := regexp.MustCompile("(?s)```suggestion\\s*\\n(.*?)```")
-	matches := re.FindAllStringSubmatch(body, -1)
+	matches := suggestionRe.FindAllStringSubmatch(body, -1)
 
 	suggestions := make([]string, 0, len(matches))
 	for _, match := range matches {
