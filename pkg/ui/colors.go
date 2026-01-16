@@ -63,13 +63,12 @@ func WarmupMarkdownRenderer() {
 }
 
 // SetColorEnabled toggles ANSI color output across the UI helpers.
+// Must be called before any rendering occurs (typically at startup).
 func SetColorEnabled(enabled bool) {
 	colorEnabled = enabled
 	if !enabled {
 		lipgloss.SetColorProfile(termenv.Ascii)
 	}
-	// Reset cached renderer when color setting changes
-	cachedMarkdownRenderer = nil
 }
 
 // ColorsEnabled reports whether ANSI colors are enabled.

@@ -268,7 +268,7 @@ func TestEditFilePrefix(t *testing.T) {
 				if lastColon > 0 {
 					path := remainder[:lastColon]
 					var lineNum int
-					fmt.Sscanf(remainder[lastColon+1:], "%d", &lineNum)
+					_, _ = fmt.Sscanf(remainder[lastColon+1:], "%d", &lineNum)
 					if path != tt.expectedPath {
 						t.Errorf("Path = %q, want %q", path, tt.expectedPath)
 					}
