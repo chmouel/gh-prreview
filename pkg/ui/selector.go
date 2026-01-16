@@ -392,11 +392,11 @@ func (m *SelectionModel[T]) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 				return m, nil
 			case "ctrl+f":
 				// Page down in detail view
-				m.viewport.ViewDown()
+				m.viewport.PageDown()
 				return m, nil
 			case "ctrl+b":
 				// Page up in detail view
-				m.viewport.ViewUp()
+				m.viewport.PageUp()
 				return m, nil
 			case "r", "u":
 				// Execute resolve action from detail view (r=resolve, u=unresolve - both toggle)
@@ -515,7 +515,7 @@ func (m *SelectionModel[T]) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 							parts := strings.SplitN(strings.TrimPrefix(result, "EDIT_FILE:"), ":", 2)
 							if len(parts) == 2 {
 								lineNum := 0
-								fmt.Sscanf(parts[1], "%d", &lineNum)
+								_, _ = fmt.Sscanf(parts[1], "%d", &lineNum)
 								return m, m.editInEditor(parts[0], lineNum)
 							}
 						}
@@ -825,7 +825,7 @@ func (m *SelectionModel[T]) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 						parts := strings.SplitN(strings.TrimPrefix(result, "EDIT_FILE:"), ":", 2)
 						if len(parts) == 2 {
 							lineNum := 0
-							fmt.Sscanf(parts[1], "%d", &lineNum)
+							_, _ = fmt.Sscanf(parts[1], "%d", &lineNum)
 							return m, m.editInEditor(parts[0], lineNum)
 						}
 					}
