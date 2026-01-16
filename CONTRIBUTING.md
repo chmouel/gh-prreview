@@ -18,20 +18,27 @@ Thank you for your interest in contributing to gh-prreview! This document provid
 git clone https://github.com/chmouel/gh-prreview.git
 cd gh-prreview
 ```
+2. Install commit hooks:
 
-2. Install dependencies:
+   The repository contains a file called `.pre-commit-config.yaml` that defines “commit hook” behavior to be run locally in your environment each time you commit a change to the sources. To enable that “commit hook” behavior, first follow the installation instructions at https://pre-commit.com/#install, and then run this:
+
+   ```bash
+   pre-commit install
+   ```
+
+3. Install dependencies:
 
 ```bash
 make deps
 ```
 
-3. Build the project:
+4. Build the project:
 
 ```bash
 make build
 ```
 
-4. Run tests:
+5. Run tests:
 
 ```bash
 make test
