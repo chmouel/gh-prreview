@@ -9,8 +9,8 @@ import (
 	"strconv"
 	"strings"
 
-	"github.com/chmouel/gh-prreview/pkg/github"
-	"github.com/chmouel/gh-prreview/pkg/ui"
+	"github.com/gh-tui-tools/gh-review-conductor/pkg/github"
+	"github.com/gh-tui-tools/gh-review-conductor/pkg/ui"
 	"github.com/spf13/cobra"
 )
 
@@ -27,7 +27,7 @@ var commentCmd = &cobra.Command{
 	Short: "Reply to a pull request review comment",
 	Long: `Post a reply to an existing pull request review comment thread.
 
-COMMENT_ID is required. You can find comment IDs by using 'gh prreview list'.
+COMMENT_ID is required. You can find comment IDs by using 'gh review-conductor list'.
 When only COMMENT_ID is provided, the PR is inferred from the current branch.
 When both COMMENT_ID and PR_NUMBER are provided, they are used directly.`,
 	Args: cobra.MinimumNArgs(1),
@@ -57,7 +57,7 @@ func runComment(cmd *cobra.Command, args []string) error {
 
 	// Parse arguments based on count
 	if len(args) == 0 {
-		return fmt.Errorf("comment ID is required. Use 'gh prreview list' to see available comments")
+		return fmt.Errorf("comment ID is required. Use 'gh review-conductor list' to see available comments")
 	} else if len(args) == 1 {
 		// One argument: treat as COMMENT_ID, infer PR from current branch
 		commentIDVal, err := strconv.ParseInt(args[0], 10, 64)
@@ -172,7 +172,7 @@ func resolveCommentBody() (string, error) {
 func promptForCommentBody() (string, error) {
 	template := "# Write your PR review comment above. Lines starting with # are ignored.\n"
 
-	tmpFile, err := os.CreateTemp("", "gh-prreview-comment-*.md")
+	tmpFile, err := os.CreateTemp("", "gh-review-conductor-comment-*.md")
 	if err != nil {
 		return "", fmt.Errorf("failed to create temporary file: %w", err)
 	}

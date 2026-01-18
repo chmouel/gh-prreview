@@ -4,7 +4,7 @@ import (
 	"fmt"
 	"os"
 
-	"github.com/chmouel/gh-prreview/cmd"
+	"github.com/gh-tui-tools/gh-review-conductor/cmd"
 )
 
 func main() {

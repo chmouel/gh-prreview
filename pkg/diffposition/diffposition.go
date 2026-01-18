@@ -1,7 +1,7 @@
 package diffposition
 
 import (
-	"github.com/chmouel/gh-prreview/pkg/diffhunk"
+	"github.com/gh-tui-tools/gh-review-conductor/pkg/diffhunk"
 )
 
 // MapOldPositionToNew maps a line number from the old file to the new file

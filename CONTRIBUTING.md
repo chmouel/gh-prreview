@@ -1,6 +1,6 @@
-# Contributing to gh-prreview
+# Contributing to gh-review-conductor
 
-Thank you for your interest in contributing to gh-prreview! This document provides guidelines and instructions for contributing.
+Thank you for your interest in contributing to gh-review-conductor! This document provides guidelines and instructions for contributing.
 
 ## Development Setup
 
@@ -15,8 +15,8 @@ Thank you for your interest in contributing to gh-prreview! This document provid
 1. Fork and clone the repository:
 
 ```bash
-git clone https://github.com/chmouel/gh-prreview.git
-cd gh-prreview
+git clone https://github.com/gh-tui-tools/gh-review-conductor.git
+cd gh-review-conductor
 ```
 2. Install commit hooks:
 
@@ -52,22 +52,22 @@ make test
 make build
 ```
 
-This will create the `gh-prreview` binary in the project root.
+This will create the `gh-review-conductor` binary in the project root.
 
 ### Testing Locally
 
 To test the plugin locally without installing it:
 
 ```bash
-./gh-prreview list
-./gh-prreview apply
+./gh-review-conductor list
+./gh-review-conductor apply
 ```
 
 Or install it as a local extension:
 
 ```bash
 make install
-gh prreview list
+gh review-conductor list
 ```
 
 ### Running Tests

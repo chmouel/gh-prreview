@@ -1,4 +1,4 @@
-# gh-prreview
+# gh-review-conductor
 
 A GitHub CLI extension that applies review comments and suggestions directly to
 your local checkout.
@@ -7,20 +7,20 @@ your local checkout.
 
 ## Overview
 
-Use `gh prreview` to pull review comments, preview suggested changes, and apply
+Use `gh review-conductor` to pull review comments, preview suggested changes, and apply
 them interactively or in bulk, all from the terminal.
 
 ## Installation
 
 ```bash
-gh extension install chmouel/gh-prreview
+gh extension install gh-tui-tools/gh-review-conductor
 ```
 
 Or build from source:
 
 ```bash
-git clone https://github.com/chmouel/gh-prreview
-cd gh-prreview
+git clone https://github.com/gh-tui-tools/gh-review-conductor
+cd gh-review-conductor
 go build
 gh extension install .
 ```
@@ -36,9 +36,9 @@ Pass `--no-color` or set `NO_COLOR=1` to disable ANSI colors, emojis, and OSC8 h
 Fetch unresolved comments for the current PR (or pass `[PR_NUMBER] [THREAD_ID]`).
 
 ```bash
-gh prreview list [PR_NUMBER] [THREAD_ID]
-gh prreview list --all
-gh prreview list --json
+gh review-conductor list [PR_NUMBER] [THREAD_ID]
+gh review-conductor list --all
+gh review-conductor list --json
 ```
 
 ### Apply
@@ -49,8 +49,8 @@ Preview and apply suggestions interactively, or add `--all`, `--file`, or
 conflicting cases.
 
 ```bash
-gh prreview apply [PR_NUMBER]
-gh prreview apply --all [PR_NUMBER]
+gh review-conductor apply [PR_NUMBER]
+gh review-conductor apply --all [PR_NUMBER]
 ```
 
 **Tip:** keep a clean working tree before running apply.
@@ -61,8 +61,8 @@ Navigate review comments in an interactive selector, jump to a specific comment,
 or open it in your browser.
 
 ```bash
-gh prreview browse
-gh prreview browse <COMMENT_ID>
+gh review-conductor browse
+gh review-conductor browse <COMMENT_ID>
 ```
 
 ### Resolve
@@ -70,8 +70,8 @@ gh prreview browse <COMMENT_ID>
 Resolve or unresolve threads, add comments, or resolve all for the current PR.
 
 ```bash
-gh prreview resolve [COMMENT_ID]
-gh prreview resolve --all
+gh review-conductor resolve [COMMENT_ID]
+gh review-conductor resolve --all
 ```
 
 ### Comment
@@ -80,7 +80,7 @@ Reply via editor, inline `--body`, file, or stdin input. Use `--resolve` to mark
 threads resolved after replying.
 
 ```bash
-gh prreview comment <COMMENT_ID> [PR_NUMBER]
+gh review-conductor comment <COMMENT_ID> [PR_NUMBER]
 ```
 
 ## Features
