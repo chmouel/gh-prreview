@@ -421,7 +421,9 @@ func TestReactionCompleteType(t *testing.T) {
 		if emoji == "invalid" {
 			return "", fmt.Errorf("invalid emoji")
 		}
-		return fmt.Sprintf("%s reaction added at https://example.com/comment/%d", emoji, commentID), nil
+		url := fmt.Sprintf("https://example.com/comment/%d", commentID)
+		link := CreateHyperlink(url, "reaction added")
+		return fmt.Sprintf("%s %s.", emoji, link), nil
 	}
 
 	// Test successful completion
@@ -550,20 +552,21 @@ func TestReactionConfirmationMessageFormat(t *testing.T) {
 	commentID := int64(456789)
 
 	url := fmt.Sprintf("https://github.com/%s/pull/%d#discussion_r%d", repo, prNumber, commentID)
-	msg := fmt.Sprintf("%s reaction added at %s", emoji, url)
+	link := CreateHyperlink(url, "reaction added")
+	msg := fmt.Sprintf("%s %s.", emoji, link)
 
 	// Verify the message format
 	if !strings.Contains(msg, emoji) {
 		t.Errorf("Confirmation message should contain emoji %q", emoji)
 	}
-	if !strings.Contains(msg, "reaction added at") {
-		t.Error("Confirmation message should contain 'reaction added at'")
+	if !strings.Contains(msg, "reaction added") {
+		t.Error("Confirmation message should contain 'reaction added'")
 	}
 	if !strings.Contains(msg, "https://github.com/") {
-		t.Error("Confirmation message should contain GitHub URL")
+		t.Error("Confirmation message should contain GitHub URL (in hyperlink)")
 	}
 	if !strings.Contains(msg, "#discussion_r") {
-		t.Error("Confirmation message should contain comment anchor")
+		t.Error("Confirmation message should contain comment anchor (in hyperlink)")
 	}
 
 	// Verify the full confirmation dialog format
@@ -722,13 +725,14 @@ func TestReactionConfirmationMessageAllEmojis(t *testing.T) {
 	for _, emoji := range reactionEmojis {
 		t.Run(emoji.name, func(t *testing.T) {
 			url := fmt.Sprintf("https://github.com/%s/pull/%d#discussion_r%d", repo, prNumber, commentID)
-			msg := fmt.Sprintf("%s reaction added at %s", emoji.name, url)
+			link := CreateHyperlink(url, "reaction added")
+			msg := fmt.Sprintf("%s %s.", emoji.name, link)
 
 			if !strings.Contains(msg, emoji.name) {
 				t.Errorf("Message should contain emoji name %q", emoji.name)
 			}
 			if !strings.Contains(msg, url) {
-				t.Errorf("Message should contain URL")
+				t.Errorf("Message should contain URL (in hyperlink)")
 			}
 		})
 	}

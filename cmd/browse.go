@@ -168,8 +168,8 @@ func runBrowse(cmd *cobra.Command, args []string) error {
 			}
 
 			if reply != nil && reply.HTMLURL != "" {
-				link := ui.CreateHyperlink(reply.HTMLURL, reply.HTMLURL)
-				return fmt.Sprintf("%s\nPosted a comment to:\n%s", statusMsg, link), nil
+				link := ui.CreateHyperlink(reply.HTMLURL, "a comment")
+				return fmt.Sprintf("%s\nPosted %s.", statusMsg, link), nil
 			}
 
 			return statusMsg, nil
@@ -211,10 +211,8 @@ func runBrowse(cmd *cobra.Command, args []string) error {
 				return fmt.Sprintf("Posted comment %d", reply.ID), nil
 			}
 
-			// Return message with URL to trigger confirmation dialog
-			// (handleEditorFinished checks for strings.Contains(result, "https://"))
-			link := ui.CreateHyperlink(url, url)
-			return fmt.Sprintf("Comment posted!\n\n%s", link), nil
+			link := ui.CreateHyperlink(url, "a comment")
+			return fmt.Sprintf("Posted %s.", link), nil
 		}
 
 		// Editor actions for C (quote reply with context)
@@ -310,7 +308,8 @@ func runBrowse(cmd *cobra.Command, args []string) error {
 				return fmt.Sprintf("%s reaction added", emoji), nil
 			}
 			url := fmt.Sprintf("https://github.com/%s/pull/%d#discussion_r%d", repo, prNumber, commentID)
-			return fmt.Sprintf("%s reaction added at %s", emoji, url), nil
+			link := ui.CreateHyperlink(url, "reaction added")
+			return fmt.Sprintf("%s %s.", emoji, link), nil
 		}
 
 		selected, err := ui.Select(ui.SelectorOptions[BrowseItem]{
