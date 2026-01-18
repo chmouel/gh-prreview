@@ -364,14 +364,14 @@ func TestReactionEmojis(t *testing.T) {
 		name    string
 		display string
 	}{
-		{"+1", "+1"},
-		{"-1", "-1"},
-		{"laugh", "laugh"},
-		{"confused", "confused"},
-		{"heart", "heart"},
-		{"hooray", "hooray"},
-		{"rocket", "rocket"},
-		{"eyes", "eyes"},
+		{"+1", "👍"},
+		{"-1", "👎"},
+		{"laugh", "😄"},
+		{"confused", "😕"},
+		{"heart", "❤️"},
+		{"hooray", "🎉"},
+		{"rocket", "🚀"},
+		{"eyes", "👀"},
 	}
 
 	for i, expected := range expectedEmojis {
@@ -412,37 +412,42 @@ func TestReactionActionType(t *testing.T) {
 // TestReactionCompleteType verifies the ReactionComplete callback type works correctly
 func TestReactionCompleteType(t *testing.T) {
 	// Track what was called
+	var calledItem string
 	var calledID int64
-	var calledEmoji string
+	var calledDisplayEmoji string
 
-	complete := func(commentID int64, emoji string) (string, error) {
+	complete := func(item string, commentID int64, apiName, displayEmoji string) (string, error) {
+		calledItem = item
 		calledID = commentID
-		calledEmoji = emoji
-		if emoji == "invalid" {
+		calledDisplayEmoji = displayEmoji
+		if apiName == "invalid" {
 			return "", fmt.Errorf("invalid emoji")
 		}
 		url := fmt.Sprintf("https://example.com/comment/%d", commentID)
 		link := CreateHyperlink(url, "reaction added")
-		return fmt.Sprintf("%s %s.", emoji, link), nil
+		return fmt.Sprintf("%s %s.", displayEmoji, link), nil
 	}
 
 	// Test successful completion
-	msg, err := complete(12345, "+1")
+	msg, err := complete("test-item", 12345, "+1", "👍")
 	if err != nil {
 		t.Errorf("ReactionComplete returned unexpected error: %v", err)
 	}
 	if msg == "" {
 		t.Error("ReactionComplete should return a confirmation message")
 	}
+	if calledItem != "test-item" {
+		t.Errorf("ReactionComplete was called with item = %q, want %q", calledItem, "test-item")
+	}
 	if calledID != 12345 {
 		t.Errorf("ReactionComplete was called with commentID = %d, want %d", calledID, 12345)
 	}
-	if calledEmoji != "+1" {
-		t.Errorf("ReactionComplete was called with emoji = %q, want %q", calledEmoji, "+1")
+	if calledDisplayEmoji != "👍" {
+		t.Errorf("ReactionComplete was called with displayEmoji = %q, want %q", calledDisplayEmoji, "👍")
 	}
 
 	// Test error case
-	_, err = complete(99999, "invalid")
+	_, err = complete("test-item", 99999, "invalid", "❌")
 	if err == nil {
 		t.Error("ReactionComplete should return error for invalid emoji")
 	}
@@ -456,8 +461,8 @@ func TestSelectorOptionsReactionFields(t *testing.T) {
 		ReactionAction: func(item string) (int64, error) {
 			return 123, nil
 		},
-		ReactionComplete: func(commentID int64, emoji string) (string, error) {
-			return fmt.Sprintf("%s added", emoji), nil
+		ReactionComplete: func(item string, commentID int64, apiName, displayEmoji string) (string, error) {
+			return fmt.Sprintf("%s added", displayEmoji), nil
 		},
 		ReactionKey: "x react",
 	}
@@ -479,7 +484,7 @@ func TestSelectorOptionsReactionFields(t *testing.T) {
 		t.Errorf("ReactionAction callback failed: id=%d, err=%v", id, err)
 	}
 
-	msg, err := opts.ReactionComplete(123, "+1")
+	msg, err := opts.ReactionComplete("item1", 123, "+1", "👍")
 	if err != nil {
 		t.Errorf("ReactionComplete callback failed: %v", err)
 	}
@@ -518,9 +523,9 @@ func TestReactionStatusMessageFormat(t *testing.T) {
 		idx         int
 		wantContain string
 	}{
-		{0, "[1/8] +1"},
-		{1, "[2/8] -1"},
-		{7, "[8/8] eyes"},
+		{0, "[1/8] 👍"},
+		{1, "[2/8] 👎"},
+		{7, "[8/8] 👀"},
 	}
 
 	for _, tt := range tests {
@@ -546,18 +551,18 @@ func TestReactionStatusMessageFormat(t *testing.T) {
 // TestReactionConfirmationMessageFormat verifies the confirmation message includes URL
 func TestReactionConfirmationMessageFormat(t *testing.T) {
 	// Simulate what browse.go does when building the confirmation message
-	emoji := "+1"
+	displayEmoji := "👍"
 	repo := "owner/repo"
 	prNumber := 123
 	commentID := int64(456789)
 
 	url := fmt.Sprintf("https://github.com/%s/pull/%d#discussion_r%d", repo, prNumber, commentID)
 	link := CreateHyperlink(url, "reaction added")
-	msg := fmt.Sprintf("%s %s.", emoji, link)
+	msg := fmt.Sprintf("%s %s.", displayEmoji, link)
 
 	// Verify the message format
-	if !strings.Contains(msg, emoji) {
-		t.Errorf("Confirmation message should contain emoji %q", emoji)
+	if !strings.Contains(msg, displayEmoji) {
+		t.Errorf("Confirmation message should contain emoji %q", displayEmoji)
 	}
 	if !strings.Contains(msg, "reaction added") {
 		t.Error("Confirmation message should contain 'reaction added'")
@@ -676,11 +681,11 @@ func TestReactionCompleteErrorFormatting(t *testing.T) {
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			complete := func(commentID int64, emoji string) (string, error) {
-				return "", fmt.Errorf("failed to add %s reaction: %s", emoji, tt.apiError)
+			complete := func(item string, commentID int64, apiName, displayEmoji string) (string, error) {
+				return "", fmt.Errorf("failed to add %s reaction: %s", apiName, tt.apiError)
 			}
 
-			_, err := complete(12345, tt.emoji)
+			_, err := complete("test-item", 12345, tt.emoji, "👍")
 			if err == nil {
 				t.Error("Expected error, got nil")
 			}
@@ -726,10 +731,10 @@ func TestReactionConfirmationMessageAllEmojis(t *testing.T) {
 		t.Run(emoji.name, func(t *testing.T) {
 			url := fmt.Sprintf("https://github.com/%s/pull/%d#discussion_r%d", repo, prNumber, commentID)
 			link := CreateHyperlink(url, "reaction added")
-			msg := fmt.Sprintf("%s %s.", emoji.name, link)
+			msg := fmt.Sprintf("%s %s.", emoji.display, link)
 
-			if !strings.Contains(msg, emoji.name) {
-				t.Errorf("Message should contain emoji name %q", emoji.name)
+			if !strings.Contains(msg, emoji.display) {
+				t.Errorf("Message should contain emoji display %q", emoji.display)
 			}
 			if !strings.Contains(msg, url) {
 				t.Errorf("Message should contain URL (in hyperlink)")
