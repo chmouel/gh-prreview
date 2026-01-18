@@ -6,8 +6,8 @@ import (
 	"os"
 	"strconv"
 
-	"github.com/chmouel/gh-prreview/pkg/github"
-	"github.com/chmouel/gh-prreview/pkg/ui"
+	"github.com/gh-tui-tools/gh-review-conductor/pkg/github"
+	"github.com/gh-tui-tools/gh-review-conductor/pkg/ui"
 )
 
 // getPRNumberWithSelection attempts to get PR number from args, current branch,

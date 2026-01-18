@@ -11,10 +11,10 @@ import (
 	"time"
 
 	"github.com/briandowns/spinner"
-	"github.com/chmouel/gh-prreview/pkg/ai"
-	"github.com/chmouel/gh-prreview/pkg/diffhunk"
-	"github.com/chmouel/gh-prreview/pkg/github"
-	"github.com/chmouel/gh-prreview/pkg/ui"
+	"github.com/gh-tui-tools/gh-review-conductor/pkg/ai"
+	"github.com/gh-tui-tools/gh-review-conductor/pkg/diffhunk"
+	"github.com/gh-tui-tools/gh-review-conductor/pkg/github"
+	"github.com/gh-tui-tools/gh-review-conductor/pkg/ui"
 )
 
 // errEditApplied is a sentinel error indicating that a patch was successfully applied via the edit flow
@@ -401,7 +401,7 @@ func (a *Applier) findReplacementTarget(comment *github.ReviewComment, fileLines
 
 // saveMismatchDiff creates a diagnostic diff file showing what was expected vs what was found
 func (a *Applier) saveMismatchDiff(comment *github.ReviewComment, fileLines []string, targetLine int, expectedLines []string, mismatchLine int) string {
-	diffFile := fmt.Sprintf("/tmp/gh-prreview-mismatch-%d.diff", comment.ID)
+	diffFile := fmt.Sprintf("/tmp/gh-review-conductor-mismatch-%d.diff", comment.ID)
 
 	var diff strings.Builder
 
@@ -627,7 +627,7 @@ func (a *Applier) applyWithAI(comment *github.ReviewComment, autoApply bool) err
 	output, err := cmd.CombinedOutput()
 	if err != nil {
 		// Save failed AI patch for debugging
-		patchFile := fmt.Sprintf("/tmp/gh-prreview-ai-patch-%d.patch", comment.ID)
+		patchFile := fmt.Sprintf("/tmp/gh-review-conductor-ai-patch-%d.patch", comment.ID)
 		patchContent := fmt.Sprintf("# AI-generated patch for comment ID %d\n", comment.ID)
 		patchContent += fmt.Sprintf("# File: %s\n", comment.Path)
 		patchContent += fmt.Sprintf("# AI Provider: %s\n", a.aiProvider.Name())

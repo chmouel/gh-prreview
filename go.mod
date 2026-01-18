@@ -1,4 +1,4 @@
-module github.com/chmouel/gh-prreview
+module github.com/gh-tui-tools/gh-review-conductor
 
 go 1.24.0
 
@@ -11,6 +11,7 @@ require (
 	github.com/cli/go-gh/v2 v2.4.0
 	github.com/google/generative-ai-go v0.20.1
 	github.com/muesli/reflow v0.3.0
+	github.com/muesli/termenv v0.16.0
 	github.com/spf13/cobra v1.8.0
 	google.golang.org/api v0.254.0
 )
@@ -51,7 +52,6 @@ require (
 	github.com/microcosm-cc/bluemonday v1.0.26 // indirect
 	github.com/muesli/ansi v0.0.0-20230316100256-276c6243b2f6 // indirect
 	github.com/muesli/cancelreader v0.2.2 // indirect
-	github.com/muesli/termenv v0.16.0 // indirect
 	github.com/olekukonko/tablewriter v0.0.5 // indirect
 	github.com/rivo/uniseg v0.4.7 // indirect
 	github.com/sahilm/fuzzy v0.1.1 // indirect

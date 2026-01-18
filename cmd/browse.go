@@ -9,8 +9,8 @@ import (
 	"strconv"
 	"strings"
 
-	"github.com/chmouel/gh-prreview/pkg/github"
-	"github.com/chmouel/gh-prreview/pkg/ui"
+	"github.com/gh-tui-tools/gh-review-conductor/pkg/github"
+	"github.com/gh-tui-tools/gh-review-conductor/pkg/ui"
 	"github.com/spf13/cobra"
 )
 

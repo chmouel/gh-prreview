@@ -4,7 +4,7 @@ import (
 	"fmt"
 	"strings"
 
-	"github.com/chmouel/gh-prreview/pkg/github"
+	"github.com/gh-tui-tools/gh-review-conductor/pkg/github"
 )
 
 // prItemRenderer implements ItemRenderer for PullRequest

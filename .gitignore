@@ -19,7 +19,7 @@ vendor/
 go.work
 
 # Build output
-gh-prreview
+gh-review-conductor
 dist/
 bin/
 

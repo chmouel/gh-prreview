@@ -1,6 +1,6 @@
-# gh-prreview Design Document
+# gh-review-conductor Design Document
 
-This document describes the architecture, commands, and features of `gh-prreview`, a GitHub CLI extension for managing pull request review comments.
+This document describes the architecture, commands, and features of `gh-review-conductor`, a GitHub CLI extension for managing pull request review comments.
 
 ## Table of Contents
 
@@ -20,7 +20,7 @@ This document describes the architecture, commands, and features of `gh-prreview
 
 ## Overview
 
-`gh-prreview` helps developers work with GitHub pull request review comments directly from the terminal. It provides:
+`gh-review-conductor` helps developers work with GitHub pull request review comments directly from the terminal. It provides:
 
 - **Interactive browsing** of review comments with keyboard navigation
 - **Automatic suggestion application** to local files
@@ -31,7 +31,7 @@ This document describes the architecture, commands, and features of `gh-prreview
 
 ```
 ┌───────────────────────────────────────────────────────────────────────┐
-│                           gh-prreview                                 │
+│                           gh-review-conductor                                 │
 ├───────────────────────────────────────────────────────────────────────┤
 │                                                                       │
 │  ┌─────────┐  ┌─────────┐  ┌─────────┐  ┌─────────┐  ┌─────────┐      │
@@ -108,7 +108,7 @@ The tool uses both GraphQL and REST APIs:
 
 ```
 ┌─────────────────┐         ┌─────────────────┐
-│   gh-prreview   │         │   GitHub API    │
+│   gh-review-conductor   │         │   GitHub API    │
 │                 │         │                 │
 │  ┌───────────┐  │  REST   │  ┌───────────┐  │
 │  │  Client   │──┼────────▶│  │ /pulls/   │  │
@@ -130,8 +130,8 @@ The default and most feature-rich command. Provides an interactive TUI for brows
 
 **Usage:**
 ```bash
-gh prreview browse [PR_NUMBER] [COMMENT_ID]
-gh prreview                    # browse is the default command
+gh review-conductor browse [PR_NUMBER] [COMMENT_ID]
+gh review-conductor                    # browse is the default command
 ```
 
 **Flags:**
@@ -309,13 +309,13 @@ The `a` key launches a coding agent with the review comment context:
 
 ```bash
 # Default: uses 'claude' (Claude Code CLI)
-gh prreview browse 123
+gh review-conductor browse 123
 
 # Use a different agent
-GH_PRREVIEW_AGENT=aider gh prreview browse 123
+GH_REVIEW_CONDUCTOR_AGENT=aider gh review-conductor browse 123
 
 # Test prompt format
-GH_PRREVIEW_AGENT=echo gh prreview browse 123
+GH_REVIEW_CONDUCTOR_AGENT=echo gh review-conductor browse 123
 ```
 
 **Prompt format:**
@@ -365,7 +365,7 @@ Applies code suggestions from review comments to local files.
 
 **Usage:**
 ```bash
-gh prreview apply [PR_NUMBER]
+gh review-conductor apply [PR_NUMBER]
 ```
 
 **Flags:**
@@ -441,7 +441,7 @@ Lists review comments in various formats.
 
 **Usage:**
 ```bash
-gh prreview list [PR_NUMBER] [THREAD_ID]
+gh review-conductor list [PR_NUMBER] [THREAD_ID]
 ```
 
 **Flags:**
@@ -495,7 +495,7 @@ Posts a reply to a review comment thread.
 
 **Usage:**
 ```bash
-gh prreview comment COMMENT_ID [PR_NUMBER]
+gh review-conductor comment COMMENT_ID [PR_NUMBER]
 ```
 
 **Flags:**
@@ -533,19 +533,19 @@ gh prreview comment COMMENT_ID [PR_NUMBER]
 **Examples:**
 ```bash
 # Open editor to compose reply
-gh prreview comment 123456789
+gh review-conductor comment 123456789
 
 # Inline body
-gh prreview comment 123456789 --body "Thanks, fixed!"
+gh review-conductor comment 123456789 --body "Thanks, fixed!"
 
 # From file
-gh prreview comment 123456789 --body-file response.md
+gh review-conductor comment 123456789 --body-file response.md
 
 # From pipe
-echo "LGTM" | gh prreview comment 123456789 --stdin
+echo "LGTM" | gh review-conductor comment 123456789 --stdin
 
 # Reply and resolve
-gh prreview comment 123456789 --body "Done" --resolve
+gh review-conductor comment 123456789 --body "Done" --resolve
 ```
 
 ---
@@ -556,8 +556,8 @@ Resolves or unresolves review comment threads.
 
 **Usage:**
 ```bash
-gh prreview resolve [COMMENT_ID]
-gh prreview resolve [PR_NUMBER] [COMMENT_ID]
+gh review-conductor resolve [COMMENT_ID]
+gh review-conductor resolve [PR_NUMBER] [COMMENT_ID]
 ```
 
 **Flags:**
@@ -590,19 +590,19 @@ gh prreview resolve [PR_NUMBER] [COMMENT_ID]
 **Examples:**
 ```bash
 # Resolve single comment
-gh prreview resolve 123456789
+gh review-conductor resolve 123456789
 
 # Unresolve
-gh prreview resolve 123456789 --unresolve
+gh review-conductor resolve 123456789 --unresolve
 
 # Resolve with comment
-gh prreview resolve 123456789 --comment "Fixed in abc123"
+gh review-conductor resolve 123456789 --comment "Fixed in abc123"
 
 # Resolve with comment from file
-gh prreview resolve 123456789 --comment @response.md
+gh review-conductor resolve 123456789 --comment @response.md
 
 # Resolve all unresolved comments
-gh prreview resolve --all
+gh review-conductor resolve --all
 ```
 
 ---
@@ -780,7 +780,7 @@ func SetUIDebug(enabled bool) {
 | Variable | Description | Default |
 |----------|-------------|---------|
 | `EDITOR` | Editor for composing replies | `vim` |
-| `GH_PRREVIEW_AGENT` | Coding agent command | `claude` |
+| `GH_REVIEW_CONDUCTOR_AGENT` | Coding agent command | `claude` |
 | `GEMINI_API_KEY` | Gemini AI API key | - |
 | `OPENAI_API_KEY` | OpenAI API key | - |
 | `ANTHROPIC_API_KEY` | Claude API key | - |
@@ -794,17 +794,17 @@ func SetUIDebug(enabled bool) {
 
 When suggestion application fails, diagnostic files are written to `/tmp/`:
 
-- `gh-prreview-mismatch-*.diff` - Expected vs actual content
-- `gh-prreview-patch-*.patch` - Failed patch with error details
-- `gh-prreview-ai-patch-*.patch` - Failed AI-generated patch
+- `gh-review-conductor-mismatch-*.diff` - Expected vs actual content
+- `gh-review-conductor-patch-*.patch` - Failed patch with error details
+- `gh-review-conductor-ai-patch-*.patch` - Failed AI-generated patch
 
 ### Debug Mode
 
 All commands support `--debug` for detailed output:
 
 ```bash
-gh prreview browse 123 --debug
-gh prreview apply 123 --debug
+gh review-conductor browse 123 --debug
+gh review-conductor apply 123 --debug
 ```
 
 This logs:
