@@ -147,11 +147,11 @@ The browse command provides two interactive views:
 ├───────────────────────────────────────────────────────────────────────┤
 │                                                                       │
 │  > src/components/Button.tsx                                          │
-│      @reviewer: Consider using memo here...            (unresolved)   │
-│      @author: Good point, I'll update...               (resolved)     │
+│      @reviewer Line 42 [2 replies]                     (unresolved)   │
+│      @author Line 15                                   (resolved)     │
 │                                                                       │
 │  > src/utils/format.ts                                                │
-│      @reviewer: This could be simplified...            (unresolved)   │
+│      @reviewer Line 8 [1 reply]                        (unresolved)   │
 │                                                                       │
 ├───────────────────────────────────────────────────────────────────────┤
 │  arrows:navigate  enter:view  o:open  r:resolve  Q:quote  a:agent     │
