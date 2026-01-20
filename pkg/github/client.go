@@ -8,9 +8,9 @@ import (
 	"strings"
 	"time"
 
+	"github.com/cli/go-gh/v2"
 	"github.com/gh-tui-tools/gh-review-conductor/pkg/diffposition"
 	"github.com/gh-tui-tools/gh-review-conductor/pkg/parser"
-	"github.com/cli/go-gh/v2"
 )
 
 type Client struct {

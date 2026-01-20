@@ -117,27 +117,27 @@ func TestBrowseItemRenderer_Title_PreviewTruncation(t *testing.T) {
 	}
 
 	tests := []struct {
-		name           string
-		body           string
-		shouldTruncate bool
+		name               string
+		body               string
+		shouldTruncate     bool
 		shouldHaveEllipsis bool
 	}{
 		{
-			name:           "short single line",
-			body:           "Short comment",
-			shouldTruncate: false,
+			name:               "short single line",
+			body:               "Short comment",
+			shouldTruncate:     false,
 			shouldHaveEllipsis: false,
 		},
 		{
-			name:           "multi-line adds ellipsis",
-			body:           "First line\nSecond line",
-			shouldTruncate: false,
+			name:               "multi-line adds ellipsis",
+			body:               "First line\nSecond line",
+			shouldTruncate:     false,
 			shouldHaveEllipsis: true,
 		},
 		{
-			name:           "very long line gets truncated",
-			body:           strings.Repeat("a", 100),
-			shouldTruncate: true,
+			name:               "very long line gets truncated",
+			body:               strings.Repeat("a", 100),
+			shouldTruncate:     true,
 			shouldHaveEllipsis: true,
 		},
 	}

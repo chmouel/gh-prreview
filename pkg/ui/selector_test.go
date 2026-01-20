@@ -1081,17 +1081,19 @@ type mockRenderer struct {
 	previewContent string
 }
 
-func (r mockRenderer) Title(item string) string                           { return item }
-func (r mockRenderer) Description(item string) string                     { return "desc" }
-func (r mockRenderer) Preview(item string) string                         { return r.previewContent }
-func (r mockRenderer) PreviewWithHighlight(item string, idx int) string   { return r.previewContent + "-" + item }
-func (r mockRenderer) EditPath(item string) string                        { return "" }
-func (r mockRenderer) EditLine(item string) int                           { return 0 }
-func (r mockRenderer) FilterValue(item string) string                     { return item }
-func (r mockRenderer) IsSkippable(item string) bool                       { return false }
-func (r mockRenderer) ThreadCommentCount(item string) int                 { return 1 }
-func (r mockRenderer) ThreadCommentPreview(item string, idx int) string   { return item }
-func (r mockRenderer) WithSelectedComment(item string, idx int) string    { return item }
+func (r mockRenderer) Title(item string) string       { return item }
+func (r mockRenderer) Description(item string) string { return "desc" }
+func (r mockRenderer) Preview(item string) string     { return r.previewContent }
+func (r mockRenderer) PreviewWithHighlight(item string, idx int) string {
+	return r.previewContent + "-" + item
+}
+func (r mockRenderer) EditPath(item string) string                      { return "" }
+func (r mockRenderer) EditLine(item string) int                         { return 0 }
+func (r mockRenderer) FilterValue(item string) string                   { return item }
+func (r mockRenderer) IsSkippable(item string) bool                     { return false }
+func (r mockRenderer) ThreadCommentCount(item string) int               { return 1 }
+func (r mockRenderer) ThreadCommentPreview(item string, idx int) string { return item }
+func (r mockRenderer) WithSelectedComment(item string, idx int) string  { return item }
 
 // newTestModel creates a SelectionModel suitable for testing
 func newTestModel(items []string, opts SelectorOptions[string]) SelectionModel[string] {
