@@ -592,7 +592,18 @@ func (r *browseItemRenderer) Title(item BrowseItem) string {
 	// Comment Metadata
 	style := ui.NewReviewListStyle(item.Comment.Author, item.Comment.IsResolved())
 	// Indent with tree structure
-	return fmt.Sprintf("  └── %s Line %d %s", style.FormatCommentTitle(item.Comment.ID), item.Comment.Line, style.Status.Format(true))
+	title := fmt.Sprintf("  └── %s Line %d", style.FormatCommentTitle(item.Comment.ID), item.Comment.Line)
+	// Add reply count if there are replies
+	if len(item.Comment.ThreadComments) > 0 {
+		replyCount := len(item.Comment.ThreadComments)
+		replyText := "reply"
+		if replyCount > 1 {
+			replyText = "replies"
+		}
+		title += fmt.Sprintf(" [%d %s]", replyCount, replyText)
+	}
+	title += " " + style.Status.Format(true)
+	return title
 }
 
 func (r *browseItemRenderer) Description(item BrowseItem) string {

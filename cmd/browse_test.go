@@ -252,6 +252,72 @@ func TestBuildCommentTree(t *testing.T) {
 	}
 }
 
+func TestBrowseItemRenderer_Title_ReplyCount(t *testing.T) {
+	renderer := &browseItemRenderer{
+		repo:           "owner/repo",
+		prNumber:       123,
+		collapsedFiles: make(map[string]bool),
+	}
+
+	tests := []struct {
+		name           string
+		replyCount     int
+		wantContains   string
+		wantNotContain string
+	}{
+		{
+			name:           "no replies shows no count",
+			replyCount:     0,
+			wantContains:   "",
+			wantNotContain: "repl",
+		},
+		{
+			name:         "one reply shows singular",
+			replyCount:   1,
+			wantContains: "[1 reply]",
+		},
+		{
+			name:         "multiple replies shows plural",
+			replyCount:   3,
+			wantContains: "[3 replies]",
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			var threadComments []github.ThreadComment
+			for i := 0; i < tt.replyCount; i++ {
+				threadComments = append(threadComments, github.ThreadComment{
+					ID:     int64(100 + i),
+					Author: "replier",
+					Body:   "Reply body",
+				})
+			}
+
+			item := BrowseItem{
+				Type: "comment",
+				Path: "src/main.go",
+				Comment: &github.ReviewComment{
+					ID:             123,
+					Author:         "reviewer",
+					Body:           "Original comment",
+					Line:           42,
+					ThreadComments: threadComments,
+				},
+			}
+
+			title := renderer.Title(item)
+
+			if tt.wantContains != "" && !strings.Contains(title, tt.wantContains) {
+				t.Errorf("Title should contain %q, got: %q", tt.wantContains, title)
+			}
+			if tt.wantNotContain != "" && strings.Contains(title, tt.wantNotContain) {
+				t.Errorf("Title should not contain %q, got: %q", tt.wantNotContain, title)
+			}
+		})
+	}
+}
+
 func TestStripMarkdownForPreview(t *testing.T) {
 	tests := []struct {
 		name     string
